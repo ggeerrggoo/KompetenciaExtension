@@ -4,7 +4,7 @@ class task {
         this.name = name;
         this.question = question;
         this.type = type;
-        this.answer_inputs = answer_inputs; 
+        this.answer_inputs = answer_inputs;
     }
 }
 //types: select_text, select_image, dropdown, custom_number, category_select
@@ -54,13 +54,44 @@ function getTaskAnswerFields() {
     return answers;
 }
 
+function getTaskDropdownField() {
+    const fields = document.querySelectorAll('div.ng-select-container');
+    return fields;
+}
 
+//clicks on a div element
 function clickdiv(div) {
     if (div && typeof div.click === 'function') {
         div.click();
     } else {
         console.log('The provided div', div, 'does not have a click event or is not valid.');
     }
+}
+
+//does mousedown on a div element
+function mousedowndiv(div) {
+    const e = new MouseEvent('mousedown', {
+        bubbles: true,
+        cancelable: true
+    });
+    div.dispatchEvent(e);
+}
+
+//select option with specific textContent from a dropdown
+function selectDropdownOption(div, option) {
+    //open the dropdown
+    mousedowndiv(div);
+    
+    const options = document.querySelectorAll('div.ng-option');
+    //console.log('Options:', options);
+    for (let i = 0; i < options.length; i++) {
+        if (options[i].textContent == option) {
+            console.log('Found option:', options[i]);
+            clickdiv(options[i]);
+            return;
+        }
+    }
+    console.log("didnt find option:", option);
 }
 
 function getTask() {
@@ -70,6 +101,9 @@ function getTask() {
     let answers = null;
     if (type == 'select_text' || type == 'select_image') {
         answers = getTaskAnswerFields();
+    }
+    else if(type == 'dropdown') {
+        answers = getTaskDropdownField();
     }
     else {
         console.log('Task type not supported for auto-answer YET.');
@@ -106,8 +140,8 @@ async function main_loop() {
 
         current_task = getTask();
         console.log('Task Type:', current_task.type);
-        console.log('Task Name:', current_task.name.innerHTML);
-        console.log('Task Question:', current_task.question.innerHTML);
+        //console.log('Task Name:', current_task.name.innerHTML);
+        //console.log('Task Question:', current_task.question.innerHTML);
         if (current_task.type == 'select_text' || current_task.type == 'select_image') {
             let answers = current_task.answer_inputs;
             console.log('Task Answers number:', answers.length);
@@ -116,6 +150,18 @@ async function main_loop() {
                 clickdiv(answers[i]);
                 console.log(answers[i].textContent);
             }
+        }
+        else if (current_task.type == 'dropdown') {
+            let fields = current_task.answer_inputs;
+            console.log('dropdown fields:', fields);
+            for (let i = 0; i < fields.length; i++) {
+                console.log('Clicking dropdown field:', fields[i]);
+                correct_string = "";                                    //TODO: get correct solution
+                selectDropdownOption(fields[i], correct_string);
+            }
+        }
+        else {
+            console.log('Task type not supported for auto-answer YET.');
         }
 
         last_url = url;
