@@ -1,10 +1,12 @@
 //name: h3 element, question: div element, type: div element
 class task {
-    constructor(name, question, type, answerInputs) {
+    constructor(name, question, description, type, answerInputs, selectedAnswers) {
         this.name = name;
         this.question = question;
+        this.description = description;
         this.type = type;
         this.answerInputs = answerInputs;
+        this.selectedAnswers = selectedAnswers;
     }
 }
 //types: select_text, select_image, dropdown, custom_number, category_select
@@ -28,12 +30,8 @@ function getTaskType() {
 }
 
 function getTaskName() {
-    const tasknames = document.querySelectorAll('h3.mb-3');
-    for (let i = 0; i < tasknames.length; i++) {
-        if (!tasknames[i].classList.contains('pl-3')) {
-            return tasknames[i];
-        }
-    }
+    const taskname = document.querySelector('h3.mb-3');
+    return taskname
 }
 
 function getTaskQuestion() {
@@ -95,10 +93,12 @@ function isImageAnswerSelected(div) {
 }
 
 function dropdownAnswerSelected(div) {
-    if (div.textContent == "") {
+    let answer = div.firstChild.textContent; // firstchild because of the stupid x at the end
+    if (answer == "") {
         return false;
     }
-    return div.textContent;
+    answer = answer.trim();
+    return answer;
 }
 
 function isCategoryAnswerSelected(div) {
@@ -180,11 +180,11 @@ function getSelectedAnswers(taskType, answerInputs) {
     
     case 'category_select':
         for (let i = 0; i < answerInputs.length; i++) {
-            let selectedAnswers = [];
+            let currentSelected = [];
             for (let j = 0; j < answerInputs[i].length; j++) {
-                selectedAnswers.push(isCategoryAnswerSelected(answers_from_div[j]));
+                currentSelected.push(isCategoryAnswerSelected(answerInputs[i][j]));
             }
-            selected.push(selectedAnswers);
+            selected.push(currentSelected);
         }
         return selected;
 
@@ -195,7 +195,7 @@ function getSelectedAnswers(taskType, answerInputs) {
 }
 
 function clearSelectedAnswers(taskType,divs) {
-    selectedAnswers = getSelectedAnswers(taskType, divs);
+    let selectedAnswers = getSelectedAnswers(taskType, divs);
 
     switch (taskType) {
         case 'select_text':
@@ -279,6 +279,7 @@ function getTask() {
     let type = getTaskType();
     let name = getTaskName();
     let question = getTaskQuestion();
+    let description = getTaskDescription().textContent;
     let answers = null;
     if (type == 'select_text' || type == 'select_image') {
         answers = getTaskAnswerFields();
@@ -298,20 +299,73 @@ function getTask() {
         //TODO
         answers = [];   
     }
-    let t = new task(name, question, type, answers);
+    let selectedAnswers = getSelectedAnswers(type, answers);
+    let t = new task(name, question, description, type, answers, selectedAnswers);
     return t;
+}
+
+async function syncTaskWithDB(task) {
+
+    const dburl = ''; // strong-finals.gl.at.ply.gg:36859
+    let hasAnswers = false;
+    for (let i = 0; i < task.selectedAnswers.length; i++) {
+        if (task.selectedAnswers[i] != false) {
+            hasAnswers = true;
+            break;
+        }
+    }
+    if(!hasAnswers) {
+        const data = {
+            name: task.name.textContent,
+            question: task.question,
+            description: task.description,
+            type: task.type
+        };
+        await fetch(dburl, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        });
+        let reply = await response.json();
+        /*
+        {
+            "answers": [false, true, false, false] vagy ["kedd.", "vasárnap."] ha dropdown vagy [[false, true, false],[true, false, false],[true, false, flase]] ha category_select ...
+            "confidence": 0.8 // 0-1, mekkora része ez az összes válasznak, (üreseket nem számítva), ha nincs válasz, akkor 0
+            "answerCount": 5 // hány válasz van összesen eddig, üres válaszokat nem számítva
+        }
+        */
+        return reply;
+    }
+    else {
+        const data = {
+            name: task.name.textContent,
+            question: task.question,
+            description: task.description,
+            type: task.type,
+            answers: task.selectedAnswers
+        };
+        await fetch(dburl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        });
+    }
 }
 
 async function main_loop() {
     let last_url = '';
     let url = '';
     let current_task = null;
-    let selections = [];
+    let selectedAnswers = [];
 
     document.addEventListener('click', function(event) {
         if (typeof current_task != 'undefined' && current_task != null) {
             let selections_pre = getSelectedAnswers(current_task.type, current_task.answerInputs);
-            if (selections.length != 0) {
+            if (selections_pre.length != 0) {
                 console.log('Selected answers:', selections_pre);
                 selections = selections_pre;
             }
@@ -338,20 +392,21 @@ async function main_loop() {
             await new Promise(resolve => setTimeout(resolve, 500));
         }
         console.log('Question found!');
+        last_url = url;
 
 
         current_task = getTask();
         console.log('Task Type:', current_task.type);
-        let taskDesc = getTaskDescription();
-        for (let i = 0; i < taskDesc.length; i++) {
-            console.log('Task Description:', taskDesc[i].textContent);
-        }
+
+        // commented out debug stuff
+
         //console.log('Task Name:', current_task.name.innerHTML);
         //console.log('Task Question:', current_task.question.innerHTML);
-        if (current_task.type == 'select_text') {
+        /*if (current_task.type == 'select_text') {
             let answers = current_task.answerInputs;
             console.log('Task Answers number:', answers.length);
             console.log('Task Answers:', answers);
+
             correct = [false, true, true, false, false, false, false, false, false, false];
             writeAnswers(current_task.type, correct, answers);
             
@@ -360,29 +415,26 @@ async function main_loop() {
             let answers = current_task.answerInputs;
             console.log('Task Answers number:', answers.length);
             console.log('Task Answers:', answers);
+
+            correct = [false, true, true, false, false, false, false, false, false, false];
+            writeAnswers(current_task.type, correct, answers);
         }
         else if (current_task.type == 'dropdown') {
             let fields = current_task.answerInputs;
             console.log('dropdown fields:', fields);
-            for (let i = 0; i < fields.length; i++) {
-               console.log("dropdown field:", fields[i]);
-                console.log("selected:", dropdownAnswerSelected(fields[i]));
-            }
+            correct = ["kedd,", "vasárnap.", true, false, false, false, false, false, false, false];
+            writeAnswers(current_task.type, correct, fields);
         }
         else if (current_task.type == 'category_select') {
             let fields = current_task.answerInputs;
             console.log('category select fields:', fields);
-            for (let i = 0; i < fields.length; i++) {
-                for (let j = 0; j < fields[i].length; j++) {
-                    console.log("field id:", i, j, "selected:", isCategoryAnswerSelected(fields[i][j]));
-                }
-            }
+            correct = [[true, false, false], [false, false, true], [false, true, false], [true, false, false]];
+            writeAnswers(current_task.type, correct, fields);
         }
         else {
             console.log('Task type not supported for auto-answer YET.');
-        }
+        }*/
 
-        last_url = url;
     }
 }
 

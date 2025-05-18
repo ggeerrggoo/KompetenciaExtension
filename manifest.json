@@ -1,6 +1,6 @@
 {
-  "name": "A tehetség kapujának kulcsa",
-  "description": "nagyon unalmas a kompetenciamérés, az automatizálása annál érdekesebb",
+  "name": "TeKaKu",
+  "description": "A Tehetség Kapujának Kulcsa - automata kompetenciamérés",
   "version": "0.0",
   "manifest_version": 3,
   "action": {
