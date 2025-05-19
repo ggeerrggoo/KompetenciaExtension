@@ -6,8 +6,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 let contentType = response.headers.get('content-type') || '';
                 if (contentType.includes('application/json')) {
                     data = await response.json();
+                    console.log('JSON response:', data);
                 } else {
                     data = await response.text();
+                    console.log('Text response:', data);
                 }
                 // Convert headers to a plain object
                 let headersObj = {};

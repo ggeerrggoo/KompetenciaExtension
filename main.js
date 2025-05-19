@@ -380,8 +380,14 @@ async function syncTaskWithDB(current_task) {
         };
         
         let reply = await fetchTaskFromBackground(dburl+"/?task="+JSON.stringify(task)+"&user="+JSON.stringify(user));
+        if (reply.status == 200) {
+            console.log('query sent successfully');
+            let data = await reply.json();
+            console.log('query result:', data);
+            return data;
+        }
         if (reply.status != 200) {
-            console.log('Error getting solution:', reply.status);
+            console.log('Error posting solution:', reply);
             return;
         }
         return JSON.parse(reply);
@@ -392,7 +398,7 @@ async function syncTaskWithDB(current_task) {
             question: current_task.question,
             description: current_task.description,
             type: current_task.type,
-            answers: current_task.selectedAnswers
+            solution: current_task.selectedAnswers
         };
         const user = {
             name: settings.name,
@@ -428,6 +434,7 @@ async function syncTaskWithDB(current_task) {
             return;
         }
     }
+    return;
 }
 
 function loadSettings() {
@@ -515,7 +522,23 @@ async function main_loop() {
         current_task = getTask();
 
         // commented out debug stuff
-
+        if (current_task.type == 'select_text' || current_task.type == 'select_image' || current_task.type == 'dropdown' || current_task.type == 'category_select') {
+            let queryResult = await syncTaskWithDB(current_task);
+            if (queryResult != null) {
+                console.log('Query result:', queryResult);
+                if (queryResult.totalVotes >= settings.minvotes && queryResult.votes / queryResult.totalVotes >= settings.votepercentage) {
+                    writeAnswers(current_task.type, correct, current_task.answerInputs);
+                }
+                else {
+                    console.log('Not enough votes or not enough percentage of votes.');
+                    console.log('Total votes:', queryResult.totalVotes, "required votes:", settings.minvotes);
+                    console.log('Vote%:', queryResult.votes / queryResult.totalVotes, "required votes:", settings.votepercentage);
+                }
+            }
+            else {
+                console.log('No solution found in the database.');
+            }
+        }
         if (current_task.type == 'custom_number') {
             console.log('Custom number task found.');
             let correct = [42];
