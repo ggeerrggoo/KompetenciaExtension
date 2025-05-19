@@ -306,7 +306,9 @@ function getTask() {
 
 async function syncTaskWithDB(task) {
 
-    const dburl = ''; // strong-finals.gl.at.ply.gg:36859
+    const dburl = 'strong-finals.gl.at.ply.gg:36859'; // strong-finals.gl.at.ply.gg:36859
+    let personID = 'G';
+    let personName = 'Gergo';
     let hasAnswers = false;
     for (let i = 0; i < task.selectedAnswers.length; i++) {
         if (task.selectedAnswers[i] != false) {
@@ -316,10 +318,12 @@ async function syncTaskWithDB(task) {
     }
     if(!hasAnswers) {
         const data = {
-            name: task.name.textContent,
-            question: task.question,
-            description: task.description,
-            type: task.type
+            azonosito: personID,
+            name: personName,
+            task_name: task.name.textContent,
+            task_question: task.question,
+            task_description: task.description,
+            task_type: task.type
         };
         await fetch(dburl, {
             method: 'GET',
@@ -340,11 +344,13 @@ async function syncTaskWithDB(task) {
     }
     else {
         const data = {
-            name: task.name.textContent,
-            question: task.question,
-            description: task.description,
-            type: task.type,
-            answers: task.selectedAnswers
+            azonosito: personID,
+            name: personName,
+            task_name: task.name.textContent,
+            task_question: task.question,
+            task_description: task.description,
+            task_type: task.type,
+            task_answers: task.selectedAnswers
         };
         await fetch(dburl, {
             method: 'POST',
@@ -373,6 +379,27 @@ async function main_loop() {
         
     });
 
+    // Listen for 'i' key press
+    document.addEventListener('keydown', function(event) {
+        if (event.key === 'i' || event.key === 'I') {
+            if (current_task != null) {
+                console.log('URL:', url);
+                console.log('Current task:', current_task);
+                //console.log('Selected answers:', current_task.selectedAnswers);
+                //console.log('Task type:', current_task.type);
+                //console.log('Task name:', current_task.name.textContent);
+                //console.log('Task question:', current_task.question.textContent);
+                //console.log('Task description:', current_task.description);
+            }
+        }
+        else if (event.key === 's' || event.key === 'S') {
+            if (current_task != null) {
+                console.log('Syncing task with DB...');
+                syncTaskWithDB(current_task);
+            }
+        }
+    });
+
     while (true) {
         url = window.location.href;
 
@@ -384,19 +411,18 @@ async function main_loop() {
         
         //when a new task is found
 
-        console.log('URL:', url);
+
 
         //wait for the page to show a question
-        console.log('Waiting for question...\r');
+        
         while (getTaskQuestion() == 'No question found.') {
             await new Promise(resolve => setTimeout(resolve, 500));
         }
-        console.log('Question found!');
+        
         last_url = url;
 
 
         current_task = getTask();
-        console.log('Task Type:', current_task.type);
 
         // commented out debug stuff
 
