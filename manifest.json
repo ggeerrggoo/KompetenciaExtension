@@ -16,5 +16,8 @@
         "https://www.meres.tehetsegkapu.hu/*"
       ]
     }
+  ],
+  "permissions": [
+    "storage"
   ]
 }

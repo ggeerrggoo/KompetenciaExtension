@@ -356,7 +356,29 @@ async function syncTaskWithDB(task) {
     }
 }
 
+function loadSettings() {
+    chrome.storage.sync.get({
+        name: '',
+        minvotes: 0,
+        votepercentage: 0.0
+    }, function(items) {
+        settings.name = items.name;
+        if(items.minvotes == 0) {
+            settings.minvotes = 5;
+        }
+        else settings.minvotes = items.minvotes;
+
+        if(items.votepercentage == 0.0) {
+            settings.votepercentage = 80.0;
+        }
+        else settings.votepercentage = items.votepercentage * 100.0;
+    });
+}
+
+var settings = {};
 async function main_loop() {
+    loadSettings();
+
     let last_url = '';
     let url = '';
     let current_task = null;
@@ -437,5 +459,7 @@ async function main_loop() {
 
     }
 }
+
+
 
 main_loop();
