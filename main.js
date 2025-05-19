@@ -30,8 +30,8 @@ function getTaskType() {
 }
 
 function getTaskName() {
-    const taskname = document.querySelector('h3.mb-3');
-    return taskname
+    const tasknames = document.querySelectorAll('h3.mb-3');
+    return tasknames[tasknames.length - 1];
 }
 
 function getTaskQuestion() {
@@ -78,6 +78,11 @@ function getTaskCategorySelectAnswersFromDiv(div) {
     return answers;
 }
 
+function getTaskCustomNumberFields() {
+    const fields = document.querySelectorAll('input.form-control');
+    return fields;
+}
+
 function isTextAnswerSelected(div) {
     if (div.querySelector('div.selected') != null) {
         return true;
@@ -104,6 +109,13 @@ function dropdownAnswerSelected(div) {
 function isCategoryAnswerSelected(div) {
     if (div.classList.contains("selected")) {
         return true;
+    }
+    return false;
+}
+
+function CustomNumberAnswerSelected(div) {
+    if (div.value != "") {
+        return div.value;
     }
     return false;
 }
@@ -146,6 +158,8 @@ function selectDropdownOption(div, option) {
     console.log("didnt find option:", option);
 }
 
+
+
 function getSelectedAnswers(taskType, answerInputs) {
     let selected = [];
 
@@ -159,7 +173,7 @@ function getSelectedAnswers(taskType, answerInputs) {
                 selected.push(false);
             }
         }
-        return selected;
+        break;
     
     case 'select_image':
         for (let i = 0; i < answerInputs.length; i++) {
@@ -170,13 +184,13 @@ function getSelectedAnswers(taskType, answerInputs) {
                 selected.push(false);
             }
         }
-        return selected;
+        break;
     
     case 'dropdown':
         for (let i = 0; i < answerInputs.length; i++) {
             selected.push(dropdownAnswerSelected(answerInputs[i]));
         }
-        return selected;
+        break;
     
     case 'category_select':
         for (let i = 0; i < answerInputs.length; i++) {
@@ -186,12 +200,17 @@ function getSelectedAnswers(taskType, answerInputs) {
             }
             selected.push(currentSelected);
         }
-        return selected;
-
+        break;
+    case 'custom_number':
+        for (let i = 0; i < answerInputs.length; i++) {
+            selected.push(CustomNumberAnswerSelected(answerInputs[i]));
+        }
+        break;
     default:
         console.log('Task type not supported for auto answer reading YET.');
-        return selected;
+        break;
     }
+    return selected;
 }
 
 function clearSelectedAnswers(taskType,divs) {
@@ -269,6 +288,14 @@ function writeAnswers(taskType, answers, divs) {
                 }
             }
             break;
+        case 'custom_number':
+            for (let i = 0; i < divs.length; i++) {
+                if (answers[i] != false) {
+                    divs[i].value = answers[i];
+                    divs[i].dispatchEvent(new Event('input', { bubbles: true }));
+                }
+            }
+            break;
         default:
             console.log('Task type not supported for auto answer writing YET.');
             break;
@@ -295,6 +322,9 @@ function getTask() {
             answers.push(answers_from_div);
             }
     }
+    else if (type == 'custom_number') {
+        answers = getTaskCustomNumberFields();
+    }
     else {
         //TODO
         answers = [];   
@@ -304,37 +334,52 @@ function getTask() {
     return t;
 }
 
-async function syncTaskWithDB(task) {
+function fetchTaskFromBackground(url, options) {
+    return new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage(
+            { type: "fetchTask", url: url, options: options },
+            (response) => {
+                if (response && response.success) {
+                    // Return a Response-like object
+                    resolve({
+                        status: response.status,
+                        statusText: response.statusText,
+                        headers: response.headers,
+                        json: async () => response.data,
+                        text: async () => JSON.stringify(response.data),
+                        ok: response.status >= 200 && response.status < 300
+                    });
+                } else {
+                    reject(response ? response.error : "Unknown error");
+                }
+            }
+        );
+    });
+}
 
-    const dburl = 'strong-finals.gl.at.ply.gg:36859'; // strong-finals.gl.at.ply.gg:36859
-    let personID = 'G';
-    let personName = 'Gergo';
+async function syncTaskWithDB(current_task) {   
+
+    const dburl = 'http://strong-finals.gl.at.ply.gg:36859/solution'; // strong-finals.gl.at.ply.gg:36859
+
     let hasAnswers = false;
-    for (let i = 0; i < task.selectedAnswers.length; i++) {
-        if (task.selectedAnswers[i] != false) {
+    for (let i = 0; i < current_task.selectedAnswers.length; i++) {
+        if (current_task.selectedAnswers[i] != false) {
             hasAnswers = true;
             break;
         }
     }
     if(!hasAnswers) {
         let task = {
-            name: task.name.textContent,
-            question: task.question,
-            type: task.type
+            name: current_task.name.textContent,
+            question: current_task.question,
+            type: current_task.type
         };
         let user = {
             name: settings.name,
             azonosito: 'unknown'
         };
         
-        let reply = await fetch(dburl+"/?task="+JSON.stringify(task)+"&user="+JSON.stringify(user));
-        /*
-        {
-            "answers": [false, true, false, false] vagy ["kedd.", "vasárnap."] ha dropdown vagy [[false, true, false],[true, false, false],[true, false, flase]] ha category_select ...
-            "confidence": 0.8 // 0-1, mekkora része ez az összes válasznak, (üreseket nem számítva), ha nincs válasz, akkor 0
-            "answerCount": 5 // hány válasz van összesen eddig, üres válaszokat nem számítva
-        }
-        */
+        let reply = await fetchTaskFromBackground(dburl+"/?task="+JSON.stringify(task)+"&user="+JSON.stringify(user));
         if (reply.status != 200) {
             console.log('Error getting solution:', reply.status);
             return;
@@ -343,17 +388,27 @@ async function syncTaskWithDB(task) {
     }
     else {
         const task = {
-            name: task.name.textContent,
-            question: task.question,
-            description: task.description,
-            type: task.type,
-            answers: task.selectedAnswers
+            name: current_task.name.textContent,
+            question: current_task.question,
+            description: current_task.description,
+            type: current_task.type,
+            answers: current_task.selectedAnswers
         };
         const user = {
             name: settings.name,
             azonosito: 'unknown'
         };
-        const reply = await fetch(dburl, {
+        /*const reply = await fetch(dburl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                task: task,
+                user: user
+            })
+        });*/
+        const reply = await fetchTaskFromBackground(dburl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -363,8 +418,13 @@ async function syncTaskWithDB(task) {
                 user: user
             })
         });
+        if (reply.status == 200) {
+            console.log('Solution posted successfully');
+            let data = await reply.json();
+            return data;
+        }
         if (reply.status != 200) {
-            console.log('Error posting solution:', reply.status);
+            console.log('Error posting solution:', reply);
             return;
         }
     }
@@ -403,13 +463,13 @@ async function main_loop() {
             let selections_pre = getSelectedAnswers(current_task.type, current_task.answerInputs);
             if (selections_pre.length != 0) {
                 console.log('Selected answers:', selections_pre);
-                selections = selections_pre;
+                current_task.selectedAnswers = selections_pre;
             }
         }
         
     });
 
-    // Listen for 'i' key press
+    // Listen for key press
     document.addEventListener('keydown', function(event) {
         if (event.key === 'i' || event.key === 'I') {
             if (current_task != null) {
@@ -456,40 +516,11 @@ async function main_loop() {
 
         // commented out debug stuff
 
-        //console.log('Task Name:', current_task.name.innerHTML);
-        //console.log('Task Question:', current_task.question.innerHTML);
-        /*if (current_task.type == 'select_text') {
-            let answers = current_task.answerInputs;
-            console.log('Task Answers number:', answers.length);
-            console.log('Task Answers:', answers);
-
-            correct = [false, true, true, false, false, false, false, false, false, false];
-            writeAnswers(current_task.type, correct, answers);
-            
+        if (current_task.type == 'custom_number') {
+            console.log('Custom number task found.');
+            let correct = [42];
+            writeAnswers(current_task.type, correct, current_task.answerInputs);
         }
-        else if (current_task.type == 'select_image') {
-            let answers = current_task.answerInputs;
-            console.log('Task Answers number:', answers.length);
-            console.log('Task Answers:', answers);
-
-            correct = [false, true, true, false, false, false, false, false, false, false];
-            writeAnswers(current_task.type, correct, answers);
-        }
-        else if (current_task.type == 'dropdown') {
-            let fields = current_task.answerInputs;
-            console.log('dropdown fields:', fields);
-            correct = ["kedd,", "vasárnap.", true, false, false, false, false, false, false, false];
-            writeAnswers(current_task.type, correct, fields);
-        }
-        else if (current_task.type == 'category_select') {
-            let fields = current_task.answerInputs;
-            console.log('category select fields:', fields);
-            correct = [[true, false, false], [false, false, true], [false, true, false], [true, false, false]];
-            writeAnswers(current_task.type, correct, fields);
-        }
-        else {
-            console.log('Task type not supported for auto-answer YET.');
-        }*/
 
     }
 }
