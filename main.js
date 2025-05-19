@@ -317,22 +317,17 @@ async function syncTaskWithDB(task) {
         }
     }
     if(!hasAnswers) {
-        const data = {
-            azonosito: personID,
-            name: personName,
-            task_name: task.name.textContent,
-            task_question: task.question,
-            task_description: task.description,
-            task_type: task.type
+        let task = {
+            name: task.name.textContent,
+            question: task.question,
+            type: task.type
         };
-        await fetch(dburl, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(data)
-        });
-        let reply = await response.json();
+        let user = {
+            name: settings.name,
+            azonosito: 'unknown'
+        };
+        
+        let reply = await fetch(dburl+"/?task="+JSON.stringify(task)+"&user="+JSON.stringify(user));
         /*
         {
             "answers": [false, true, false, false] vagy ["kedd.", "vasárnap."] ha dropdown vagy [[false, true, false],[true, false, false],[true, false, flase]] ha category_select ...
@@ -340,29 +335,56 @@ async function syncTaskWithDB(task) {
             "answerCount": 5 // hány válasz van összesen eddig, üres válaszokat nem számítva
         }
         */
-        return reply;
+        return JSON.parse(reply);
     }
     else {
-        const data = {
-            azonosito: personID,
-            name: personName,
-            task_name: task.name.textContent,
-            task_question: task.question,
-            task_description: task.description,
-            task_type: task.type,
-            task_answers: task.selectedAnswers
+        const task = {
+            name: task.name.textContent,
+            question: task.question,
+            description: task.description,
+            type: task.type,
+            answers: task.selectedAnswers
+        };
+        const user = {
+            name: settings.name,
+            azonosito: 'unknown'
         };
         await fetch(dburl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(data)
+            body: JSON.stringify({
+                task: task,
+                user: user
+            })
         });
     }
 }
 
+function loadSettings() {
+    chrome.storage.sync.get({
+        name: '',
+        minvotes: 0,
+        votepercentage: 0.0
+    }, function(items) {
+        settings.name = items.name;
+        if(items.minvotes == 0) {
+            settings.minvotes = 5;
+        }
+        else settings.minvotes = items.minvotes;
+
+        if(items.votepercentage == 0.0) {
+            settings.votepercentage = 80.0;
+        }
+        else settings.votepercentage = items.votepercentage * 100.0;
+    });
+}
+
+var settings = {};
 async function main_loop() {
+    loadSettings();
+
     let last_url = '';
     let url = '';
     let current_task = null;
@@ -463,5 +485,7 @@ async function main_loop() {
 
     }
 }
+
+
 
 main_loop();
