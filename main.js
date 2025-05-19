@@ -335,6 +335,10 @@ async function syncTaskWithDB(task) {
             "answerCount": 5 // hány válasz van összesen eddig, üres válaszokat nem számítva
         }
         */
+        if (reply.status != 200) {
+            console.log('Error getting solution:', reply.status);
+            return;
+        }
         return JSON.parse(reply);
     }
     else {
@@ -349,7 +353,7 @@ async function syncTaskWithDB(task) {
             name: settings.name,
             azonosito: 'unknown'
         };
-        await fetch(dburl, {
+        const reply = await fetch(dburl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -359,6 +363,10 @@ async function syncTaskWithDB(task) {
                 user: user
             })
         });
+        if (reply.status != 200) {
+            console.log('Error posting solution:', reply.status);
+            return;
+        }
     }
 }
 
