@@ -315,20 +315,17 @@ async function syncTaskWithDB(task) {
         }
     }
     if(!hasAnswers) {
-        const data = {
+        let task = {
             name: task.name.textContent,
             question: task.question,
-            description: task.description,
             type: task.type
         };
-        await fetch(dburl, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(data)
-        });
-        let reply = await response.json();
+        let user = {
+            name: settings.name,
+            azonosito: 'unknown'
+        };
+        
+        let reply = await fetch(dburl+"/?task="+JSON.stringify(task)+"&user="+JSON.stringify(user));
         /*
         {
             "answers": [false, true, false, false] vagy ["kedd.", "vasárnap."] ha dropdown vagy [[false, true, false],[true, false, false],[true, false, flase]] ha category_select ...
@@ -336,22 +333,29 @@ async function syncTaskWithDB(task) {
             "answerCount": 5 // hány válasz van összesen eddig, üres válaszokat nem számítva
         }
         */
-        return reply;
+        return JSON.parse(reply);
     }
     else {
-        const data = {
+        const task = {
             name: task.name.textContent,
             question: task.question,
             description: task.description,
             type: task.type,
             answers: task.selectedAnswers
         };
+        const user = {
+            name: settings.name,
+            azonosito: 'unknown'
+        };
         await fetch(dburl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(data)
+            body: JSON.stringify({
+                task: task,
+                user: user
+            })
         });
     }
 }
