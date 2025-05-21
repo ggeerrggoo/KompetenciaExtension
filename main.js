@@ -1,3 +1,4 @@
+console.log('Auto answer script loaded.');
 //name: h3 element, question: div element, type: div element
 class task {
     constructor(name, question, description, type, answerInputs, selectedAnswers) {
@@ -42,7 +43,7 @@ function getTaskQuestion() {
     if (questions.length > 1) {
         console.log(questions.length + " questions found.");
         console.log(questions);
-        alert('Multiple questions found. This is problematic. We havent made anything to handle this yet. debug info in the console.');
+        console.log('Multiple questions found. This is problematic. We havent made anything to handle this yet. debug info in the console.');
     }
     return questions[0];
 }
@@ -150,7 +151,6 @@ function selectDropdownOption(div, option) {
     //console.log('Options:', options);
     for (let i = 0; i < options.length; i++) {
         if (options[i].textContent == option) {
-            console.log('Found option:', options[i]);
             clickdiv(options[i]);
             return;
         }
@@ -232,11 +232,7 @@ function clearSelectedAnswers(taskType,divs) {
             }
             break;
         case 'dropdown':
-            for (let i = 0; i < divs.length; i++) {
-                if (selectedAnswers[i] != false) {
-                    selectDropdownOption(divs[i], false);
-                }
-            }
+            //not needed, because the input will let stuff be overriden
             break;
         case 'category_select':
             for (let i = 0; i < divs.length; i++) {
@@ -246,6 +242,9 @@ function clearSelectedAnswers(taskType,divs) {
                     }
                 }
             }
+            break;
+        case 'custom_number':
+            //not needed, because the input will let stuff be overriden
             break;
         default:
             console.log('Task type not supported for auto answer clearing YET.');
@@ -357,21 +356,36 @@ function fetchTaskFromBackground(url, options) {
     });
 }
 
-async function syncTaskWithDB(current_task) {   
-
-    const dburl = 'http://strong-finals.gl.at.ply.gg:36859/solution'; // strong-finals.gl.at.ply.gg:36859
-
-    let hasAnswers = false;
-    for (let i = 0; i < current_task.selectedAnswers.length; i++) {
-        if (current_task.selectedAnswers[i] != false) {
-            hasAnswers = true;
-            break;
+function checkArrayForTrue(array) {
+    for (let i = 0; i < array.length; i++) {
+        // Check for array-like objects (Array, NodeList, HTMLCollection, etc.)
+        if (
+            (Array.isArray(array[i]) || 
+            (typeof array[i] === 'object' && array[i] !== null && typeof array[i].length === 'number' && typeof array[i] !== 'string'))
+        ) {
+            if (checkArrayForTrue(Array.from(array[i]))) {
+            return true;
+            }
+        }
+        else if (array[i] !== false && array[i] !== null && array[i] !== undefined && array[i] !== '') {
+            return true;
         }
     }
-    if(!hasAnswers) {
+    return false;
+}
+
+function hasAnswers(current_task) {
+    return checkArrayForTrue(current_task.selectedAnswers);
+}
+
+async function syncTaskWithDB(current_task) {   
+
+    const dburl = 'http://strong-finals.gl.at.ply.gg:36859/solution'; // strong-finals.gl.at.ply.gg:36859/solution
+
+    if(!hasAnswers(current_task)) {
         let task = {
             name: current_task.name.textContent,
-            question: current_task.question,
+            question: current_task.question.textContent,
             type: current_task.type
         };
         let user = {
@@ -379,23 +393,26 @@ async function syncTaskWithDB(current_task) {
             azonosito: 'unknown'
         };
         
-        let reply = await fetchTaskFromBackground(dburl+"/?task="+JSON.stringify(task)+"&user="+JSON.stringify(user));
-        if (reply.status == 200) {
-            console.log('query sent successfully');
-            let data = await reply.json();
-            console.log('query result:', data);
-            return data;
+        try {
+            const reply = await fetchTaskFromBackground(dburl+"/?task="+JSON.stringify(task)+"&user="+JSON.stringify(user));
+            if (reply.status == 200) {
+                let data = await reply.json();
+                return data;
+            }
+            if (reply.status != 200) {
+                console.log('Error posting solution:', reply);
+                return;
+            }
         }
-        if (reply.status != 200) {
-            console.log('Error posting solution:', reply);
+        catch (error) {
+            console.log('Error fetching task from DB:', error);
             return;
         }
-        return JSON.parse(reply);
     }
     else {
         const task = {
             name: current_task.name.textContent,
-            question: current_task.question,
+            question: current_task.question.textContent,
             description: current_task.description,
             type: current_task.type,
             solution: current_task.selectedAnswers
@@ -414,23 +431,29 @@ async function syncTaskWithDB(current_task) {
                 user: user
             })
         });*/
-        const reply = await fetchTaskFromBackground(dburl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                task: task,
-                user: user
-            })
-        });
-        if (reply.status == 200) {
-            console.log('Solution posted successfully');
-            let data = await reply.json();
-            return data;
+        try {
+            const reply = await fetchTaskFromBackground(dburl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    task: task,
+                    user: user
+                })
+            });
+            if (reply.status == 200) {
+                console.log('Solution posted successfully');
+                let data = await reply.json();
+                return data;
+            }
+            if (reply.status != 200) {
+                console.log('Error posting solution:', reply);
+                return;
+            }
         }
-        if (reply.status != 200) {
-            console.log('Error posting solution:', reply);
+        catch (error) {
+            console.log('Error posting solution:', error);
             return;
         }
     }
@@ -464,6 +487,7 @@ async function main_loop() {
     let url = '';
     let current_task = null;
     let selectedAnswers = [];
+    let sendResults = true;
 
     document.addEventListener('click', function(event) {
         if (typeof current_task != 'undefined' && current_task != null) {
@@ -482,16 +506,11 @@ async function main_loop() {
             if (current_task != null) {
                 console.log('URL:', url);
                 console.log('Current task:', current_task);
-                //console.log('Selected answers:', current_task.selectedAnswers);
-                //console.log('Task type:', current_task.type);
-                //console.log('Task name:', current_task.name.textContent);
-                //console.log('Task question:', current_task.question.textContent);
-                //console.log('Task description:', current_task.description);
             }
         }
         else if (event.key === 's' || event.key === 'S') {
             if (current_task != null) {
-                console.log('Syncing task with DB...');
+                console.log('Syncing task with DB (keybind clicked)...');
                 syncTaskWithDB(current_task);
             }
         }
@@ -507,44 +526,51 @@ async function main_loop() {
         }
         
         //when a new task is found
-
-
-
         //wait for the page to show a question
-        
+        console.log('New URL, waiting for question...');
         while (getTaskQuestion() == 'No question found.') {
             await new Promise(resolve => setTimeout(resolve, 500));
         }
+        console.log('Question found');
         
         last_url = url;
 
-
+        if (sendResults && current_task != null && hasAnswers(current_task)) {
+                console.log('New task found, syncing old one with DB...');
+                syncTaskWithDB(current_task);
+        }
+        sendResults = true;
         current_task = getTask();
 
-        // commented out debug stuff
-        if (current_task.type == 'select_text' || current_task.type == 'select_image' || current_task.type == 'dropdown' || current_task.type == 'category_select') {
-            let queryResult = await syncTaskWithDB(current_task);
-            if (queryResult != null) {
-                console.log('Query result:', queryResult);
-                if (queryResult.totalVotes >= settings.minvotes && queryResult.votes / queryResult.totalVotes >= settings.votepercentage) {
-                    writeAnswers(current_task.type, correct, current_task.answerInputs);
+        if (hasAnswers(current_task)) {
+            console.log('Already has answers, skipping autofill...');
+            sendResults = false;
+        }
+        else if (current_task.type == 'select_text' || current_task.type == 'select_image' || current_task.type == 'dropdown' || current_task.type == 'category_select' || current_task.type == 'custom_number') {
+            try {
+                let queryResult = await syncTaskWithDB(current_task);
+                if (queryResult != null) {
+                    console.log('Query result:', queryResult);
+                    loadSettings();
+                    if (queryResult.totalVotes >= settings.minvotes && queryResult.votes / queryResult.totalVotes >= settings.votepercentage) {
+                        sendResults = false;
+                        console.log('Enough votes and enough percentage of votes.');
+                        writeAnswers(current_task.type, JSON.parse(queryResult.answer), current_task.answerInputs);
+                    }
+                    else {
+                        console.log('Not enough votes or not enough percentage of votes.');
+                        console.log('Total votes:', queryResult.totalVotes, "required votes:", settings.minvotes);
+                        console.log('Vote%:', queryResult.votes / queryResult.totalVotes, "required votes:", settings.votepercentage);
+                    }
                 }
                 else {
-                    console.log('Not enough votes or not enough percentage of votes.');
-                    console.log('Total votes:', queryResult.totalVotes, "required votes:", settings.minvotes);
-                    console.log('Vote%:', queryResult.votes / queryResult.totalVotes, "required votes:", settings.votepercentage);
+                    console.log('No solution found in the database.');
                 }
             }
-            else {
-                console.log('No solution found in the database.');
+            catch (error) {
+                console.log('Error fetching task from DB:', error);
             }
         }
-        if (current_task.type == 'custom_number') {
-            console.log('Custom number task found.');
-            let correct = [42];
-            writeAnswers(current_task.type, correct, current_task.answerInputs);
-        }
-
     }
 }
 

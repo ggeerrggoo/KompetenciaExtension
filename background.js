@@ -1,5 +1,6 @@
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === "fetchTask") {
+        try {
         fetch(message.url, message.options)
             .then(async response => {
                 let data;
@@ -25,6 +26,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 });
             })
             .catch(error => sendResponse({ success: false, error: error.toString() }));
+        } catch (error) {
+            sendResponse({ success: false, error: error.toString() });
+        }
         // Required for async response
         return true;
     }
