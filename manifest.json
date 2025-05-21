@@ -22,7 +22,8 @@
     "scripting"
   ],
   "host_permissions": [
-    "http://strong-finals.gl.at.ply.gg:36859/*"
+    "http://strong-finals.gl.at.ply.gg:36859/*",
+    "http://localhost:3000/*"
   ],
   "background": {
     "service_worker": "background.js"

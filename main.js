@@ -32,24 +32,33 @@ function getTaskType() {
 
 function getTaskName() {
     const tasknames = document.querySelectorAll('h3.mb-3');
-    return tasknames[tasknames.length - 1];
+    return tasknames[tasknames.length - 1].textContent;
 }
 
 function getTaskQuestion() {
-    const questions = document.querySelectorAll('p#kerdes');
-    if (questions.length == 0) {
-        return 'No question found.';
+    const q1 = document.querySelectorAll('p#kerdes');
+    const q2 = document.querySelectorAll('tk-kerdes-elem');
+    let qs = [];
+    if (q1.length > 0) {
+        qs = q1;
     }
-    if (questions.length > 1) {
-        console.log(questions.length + " questions found.");
-        console.log(questions);
+    else if (q2.length > 0) {
+        qs = q2;
+    }
+    if (qs.length > 1) {
+        console.log(qs.length + " questions found.");
+        console.log(qs);
         console.log('Multiple questions found. This is problematic. We havent made anything to handle this yet. debug info in the console.');
     }
-    return questions[0];
+
+    if(qs.length > 0) {
+        return qs[0].textContent.replace(/[^a-zA-Z0-9.,!?]/g, '');
+    }
+    return 'No question found.';
 }
 
 function getTaskDescription() {
-    const desc = document.querySelectorAll('div.my-3.container.containter-fix-width.ng-star-inserted');
+    const desc = document.querySelector('div.my-3.container.ng-star-inserted');
     return desc;
 }
 
@@ -157,8 +166,6 @@ function selectDropdownOption(div, option) {
     }
     console.log("didnt find option:", option);
 }
-
-
 
 function getSelectedAnswers(taskType, answerInputs) {
     let selected = [];
@@ -380,12 +387,12 @@ function hasAnswers(current_task) {
 
 async function syncTaskWithDB(current_task) {   
 
-    const dburl = 'http://strong-finals.gl.at.ply.gg:36859/solution'; // strong-finals.gl.at.ply.gg:36859/solution
+    const dburl = 'http://localhost:3000/solution'; // http://strong-finals.gl.at.ply.gg:36859/solution
 
     if(!hasAnswers(current_task)) {
         let task = {
-            name: current_task.name.textContent,
-            question: current_task.question.textContent,
+            name: current_task.name,
+            question: current_task.question,
             type: current_task.type
         };
         let user = {
@@ -400,7 +407,8 @@ async function syncTaskWithDB(current_task) {
                 return data;
             }
             if (reply.status != 200) {
-                console.log('Error posting solution:', reply);
+                console.log('Error getting solution:', reply);
+                console.log('task  sent:', task);
                 return;
             }
         }
@@ -411,8 +419,8 @@ async function syncTaskWithDB(current_task) {
     }
     else {
         const task = {
-            name: current_task.name.textContent,
-            question: current_task.question.textContent,
+            name: current_task.name,
+            question: current_task.question,
             description: current_task.description,
             type: current_task.type,
             solution: current_task.selectedAnswers
@@ -421,16 +429,6 @@ async function syncTaskWithDB(current_task) {
             name: settings.name,
             azonosito: 'unknown'
         };
-        /*const reply = await fetch(dburl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                task: task,
-                user: user
-            })
-        });*/
         try {
             const reply = await fetchTaskFromBackground(dburl, {
                 method: 'POST',
@@ -527,17 +525,18 @@ async function main_loop() {
         
         //when a new task is found
         //wait for the page to show a question
-        console.log('New URL, waiting for question...');
+        console.log('New URL, waiting for task...');
         while (getTaskQuestion() == 'No question found.') {
             await new Promise(resolve => setTimeout(resolve, 500));
         }
-        console.log('Question found');
+        console.log('task got');
         
         last_url = url;
 
         if (sendResults && current_task != null && hasAnswers(current_task)) {
                 console.log('New task found, syncing old one with DB...');
-                syncTaskWithDB(current_task);
+                let asdf = await syncTaskWithDB(current_task);
+                console.log('Sync result:', asdf);
         }
         sendResults = true;
         current_task = getTask();
