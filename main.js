@@ -387,7 +387,7 @@ function hasAnswers(current_task) {
 
 async function syncTaskWithDB(current_task) {   
 
-    const dburl = 'http://localhost:3000/solution'; // http://strong-finals.gl.at.ply.gg:36859/solution
+    const dburl = 'http://strong-finals.gl.at.ply.gg:36859/solution'; // http://strong-finals.gl.at.ply.gg:36859/solution
 
     if(!hasAnswers(current_task)) {
         let task = {
@@ -464,7 +464,8 @@ function loadSettings() {
         minvotes: 5,
         votepercentage: 0.8,
         contributer: true,
-        url: 'http://strong-finals.gl.at.ply.gg:36859/'
+        url: 'http://strong-finals.gl.at.ply.gg:36859/',
+        autoComplete: true
     }, function(items) {
         settings.name = items.name;
         if(items.minvotes == 0) {
@@ -481,6 +482,7 @@ function loadSettings() {
             settings.url = 'http://strong-finals.gl.at.ply.gg:36859/';
         }
         else settings.url = items.url;
+        settings.autoComplete = items.autoComplete;
     });
 }
 

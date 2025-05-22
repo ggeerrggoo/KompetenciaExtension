@@ -5,7 +5,8 @@ function saveOptions() {
         minvotes: document.getElementById('minvotes').value,
         votepercentage: document.getElementById('votepercentage').value/100.0,
         contributer: document.getElementById('contributer').checked,
-        url: document.getElementById('url').value
+        url: document.getElementById('url').value,
+        autoComplete: document.getElementById('auto-complete').checked
     };
     
     if(options.votepercentage > 1.0 || options.votepercentage < 0.0) {
@@ -33,7 +34,8 @@ function restoreOptions() {
         minvotes: 0,
         votepercentage: 0.0,
         contributer: true,
-        url: ''
+        url: '',
+        autoComplete: true
     }, function(items) {
         document.getElementById('name').value = items.name;
         if(items.minvotes == 0) {
@@ -51,6 +53,7 @@ function restoreOptions() {
             document.getElementById('url').value = 'http://strong-finals.gl.at.ply.gg:36859/';
         }
         else document.getElementById('url').value = items.url;
+        document.getElementById('auto-complete').checked = items.autoComplete;
     });
 }
 function showAdvanced() {
