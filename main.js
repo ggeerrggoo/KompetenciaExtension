@@ -461,8 +461,10 @@ async function syncTaskWithDB(current_task) {
 function loadSettings() {
     chrome.storage.sync.get({
         name: '',
-        minvotes: 0,
-        votepercentage: 0.0
+        minvotes: 5,
+        votepercentage: 0.8,
+        contributer: true,
+        url: 'http://strong-finals.gl.at.ply.gg:36859/'
     }, function(items) {
         settings.name = items.name;
         if(items.minvotes == 0) {
@@ -474,6 +476,11 @@ function loadSettings() {
             settings.votepercentage = 80.0;
         }
         else settings.votepercentage = items.votepercentage * 100.0;
+        settings.isContributor = items.contributer;
+        if(items.url == '') {
+            settings.url = 'http://strong-finals.gl.at.ply.gg:36859/';
+        }
+        else settings.url = items.url;
     });
 }
 
