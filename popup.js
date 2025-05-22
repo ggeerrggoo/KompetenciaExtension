@@ -3,7 +3,9 @@ function saveOptions() {
     const options = {
         name: document.getElementById('name').value,
         minvotes: document.getElementById('minvotes').value,
-        votepercentage: document.getElementById('votepercentage').value/100.0
+        votepercentage: document.getElementById('votepercentage').value/100.0,
+        contributer: document.getElementById('contributer').checked,
+        url: document.getElementById('url').value
     };
     
     if(options.votepercentage > 1.0 || options.votepercentage < 0.0) {
@@ -14,6 +16,8 @@ function saveOptions() {
         alert("Minimum votes must be greater than 0");
         return;
     }
+    
+
     chrome.storage.sync.set(options, function() {
         const status = document.getElementById('status');
         status.textContent = 'Options saved.';
@@ -27,7 +31,9 @@ function restoreOptions() {
     chrome.storage.sync.get({
         name: '',
         minvotes: 0,
-        votepercentage: 0.0
+        votepercentage: 0.0,
+        contributer: true,
+        url: ''
     }, function(items) {
         document.getElementById('name').value = items.name;
         if(items.minvotes == 0) {
@@ -39,7 +45,26 @@ function restoreOptions() {
             document.getElementById('votepercentage').value = 80.0;
         }
         else document.getElementById('votepercentage').value = items.votepercentage * 100.0;
+
+        document.getElementById('contributer').checked = items.contributer;
+        if(items.url == '') {
+            document.getElementById('url').value = 'http://strong-finals.gl.at.ply.gg:36859/';
+        }
+        else document.getElementById('url').value = items.url;
     });
 }
+function showAdvanced() {
+    const advanced = document.getElementById('advanced');
+    if(advanced.style.display == 'none') {
+        advanced.style.display = 'block';
+        document.getElementById('advancedbutton').textContent = 'Hide Advanced Options';
+    }
+    else {
+        advanced.style.display = 'none';
+        document.getElementById('advancedbutton').textContent = 'Show Advanced Options';
+    }
+}
+
 document.addEventListener('DOMContentLoaded', restoreOptions);
 document.getElementById('save').addEventListener('click', saveOptions);
+document.getElementById('advancedbutton').addEventListener('click', showAdvanced);
