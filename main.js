@@ -1,5 +1,5 @@
 console.log('Auto answer script loaded.');
-//name: h3 element, question: div element, type: div element
+//name: h3 element, question: div element, type: div element    
 class task {
     constructor(name, question, description, type, answerInputs, selectedAnswers) {
         this.name = name;
@@ -104,6 +104,15 @@ function getTaskCategorySelectAnswersFromDiv(div) {
 function getTaskCustomNumberFields() {
     const fields = document.querySelectorAll('input.form-control');
     return fields;
+}
+
+function getUserID() {
+    const url = window.location.href;
+    const match = url.match(/[?&]azon=([^&%]+)/);
+    if (match && match[1]) {
+        return decodeURIComponent(match[1]);
+    }
+    return "unknown";
 }
 
 function isTextAnswerSelected(div) {
@@ -410,7 +419,7 @@ async function syncTaskWithDB(current_task) {
         };
         let user = {
             name: settings.name,
-            azonosito: 'unknown'
+            azonosito: getUserID()
         };
         
         try {
@@ -440,7 +449,7 @@ async function syncTaskWithDB(current_task) {
         };
         const user = {
             name: settings.name,
-            azonosito: 'unknown'
+            azonosito: getUserID()
         };
         try {
             const reply = await fetchTaskFromBackground(dburl, {
@@ -582,7 +591,7 @@ async function main_loop() {
                 if (queryResult != null) {
                     console.log('Query result:', queryResult);
                     loadSettings();
-                    if (queryResult.totalVotes >= settings.minvotes && queryResult.votes / queryResult.totalVotes >= settings.votepercentage) {
+                    if (queryResult.totalVotes >= settings.minvotes && 100*queryResult.votes / queryResult.totalVotes >= settings.votepercentage) {
                         sendResults = false;
                         console.log('Enough votes and enough percentage of votes.');
                         writeAnswers(current_task.type, JSON.parse(queryResult.answer), current_task.answerInputs);
@@ -590,7 +599,7 @@ async function main_loop() {
                     else {
                         console.log('Not enough votes or not enough percentage of votes.');
                         console.log('Total votes:', queryResult.totalVotes, "required votes:", settings.minvotes);
-                        console.log('Vote%:', queryResult.votes / queryResult.totalVotes, "required votes:", settings.votepercentage);
+                        console.log('Vote%:', 100*queryResult.votes / queryResult.totalVotes , "required vote%:", settings.votepercentage);
                     }
                 }
                 else {
