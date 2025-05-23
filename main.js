@@ -45,21 +45,34 @@ function getTaskQuestion() {
     else if (q2.length > 0) {
         qs = q2;
     }
-    if (qs.length > 1) {
-        console.log(qs.length + " questions found.");
-        console.log(qs);
-        console.log('Multiple questions found. This is problematic. We havent made anything to handle this yet. debug info in the console.');
-    }
 
     if(qs.length > 0) {
-        return qs[0].textContent.replace(/[^a-zA-Z0-9.,!?]/g, '');
+        q = qs[0];
+        let i = 0;
+        while(q.textContent.length < 50 && i < 5) {
+            i++;
+            q = q.parentElement;
+            console.log('parented to:', q);
+        }
+        return q.textContent.replace(/[^a-zA-Z0-9.,!?]/g, '');
     }
     return 'No question found.';
 }
 
 function getTaskDescription() {
-    const desc = document.querySelector('div.my-3.container.ng-star-inserted');
-    return desc;
+    return "nem kell szerintem";
+    const desc1 = document.querySelector('div.my-3.container.ng-star-inserted');
+    const desc2 = document.querySelector('tk-szeparalt-layout');
+    if(desc1) {
+        return desc1.textContent;
+    }
+    else if(desc2) {
+        return desc2.textContent;
+    }
+    else {
+        console.log('No description found.');
+        return null;
+    }
 }
 
 //works with select_text and select_image task types
@@ -312,7 +325,7 @@ function getTask() {
     let type = getTaskType();
     let name = getTaskName();
     let question = getTaskQuestion();
-    let description = getTaskDescription().textContent;
+    let description = getTaskDescription();
     let answers = null;
     if (type == 'select_text' || type == 'select_image') {
         answers = getTaskAnswerFields();
@@ -441,7 +454,7 @@ async function syncTaskWithDB(current_task) {
                 })
             });
             if (reply.status == 200) {
-                console.log('Solution posted successfully');
+                console.log('Solution posted successfully', reply);
                 let data = await reply.json();
                 return data;
             }
@@ -503,7 +516,16 @@ async function main_loop() {
                 console.log('Selected answers:', selections_pre);
                 current_task.selectedAnswers = selections_pre;
             }
+            if (event.target.classList.contains('btn-danger')) { // lezárás gomb elv. ilyen
+                    if (sendResults && current_task != null && hasAnswers(current_task)) {
+                        console.log('lezárás clicked, syncing last task');
+                        let asdf = syncTaskWithDB(JSON.parse(JSON.stringify(current_task)));
+                        console.log('Sync result:', asdf);
+                        sendResults = false;
+                }
+            }
         }
+        
         
     });
 
@@ -544,7 +566,7 @@ async function main_loop() {
 
         if (sendResults && current_task != null && hasAnswers(current_task)) {
                 console.log('New task found, syncing old one with DB...');
-                let asdf = await syncTaskWithDB(current_task);
+                let asdf = syncTaskWithDB(JSON.parse(JSON.stringify(current_task)));
                 console.log('Sync result:', asdf);
         }
         sendResults = true;
