@@ -27,6 +27,9 @@ function getTaskType() {
     else if(document.querySelector("div.csoportos-valasz-betujel") != null) {
         return 'category_select';
     }
+    else if (document.querySelector('div.cdk-drag.cella-dd.ng-star-inserted')) {
+        return 'drag_drop';
+    }
     else return 'unknown';
 }
 
@@ -104,6 +107,38 @@ function getTaskCategorySelectAnswersFromDiv(div) {
 function getTaskCustomNumberFields() {
     const fields = document.querySelectorAll('input.form-control');
     return fields;
+}
+
+function getTaskDDfieldID(div, dragordrop) {
+    let ID = '';
+    if (dragordrop == 'drag') {
+        const img = div.querySelector('img');
+        if (img) {
+            ID = img.src;
+        } else {
+            ID = div.textContent.trim();
+        }
+    } else if (dragordrop == 'drop') {
+        ID = div.id;
+    }
+    return ID;
+}
+
+//[0]:drag fields, [1]: drop fields, [2]: drag field IDs (textcontent or image src), [3]: drop field IDs (.id attribute)
+function getTaskDragDropFields() {
+    const dragfields = document.querySelectorAll('div.cdk-drag.cella-dd.ng-star-inserted');
+    let dragIDs = [];
+    for (let i = 0; i < dragfields.length; i++) {
+        dragIDs.push(getTaskDDfieldID(dragfields[i], 'drag'));
+    }
+
+    const dropfields = document.querySelectorAll('div.dd-nyelo-can-recieve');
+    let dropIDs = [];
+
+    for (let i = 0; i < dropfields.length; i++) {
+        dropIDs.push(getTaskDDfieldID(dropfields[i], 'drop'));
+    }
+    return [dragfields, dropfields, dragIDs, dropIDs];
 }
 
 function getUserID() {
@@ -189,6 +224,39 @@ function selectDropdownOption(div, option) {
     console.log("didnt find option:", option);
 }
 
+function selectDragDropAnswer(toDrag, toDrop)
+{
+    const dragRect = toDrag.getBoundingClientRect();
+    const dropRect = toDrop.getBoundingClientRect();
+    
+    const startX = dragRect.left + dragRect.width / 2;
+    const startY = dragRect.top + dragRect.height / 2;
+    
+    const endX = dropRect.left + dropRect.width / 2;
+    const endY = dropRect.top + dropRect.height / 2;
+        
+    toDrag.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true,
+      clientX: startX,
+      clientY: startY
+    }));
+    document.dispatchEvent(new MouseEvent('mousemove', {
+        bubbles: true,
+        clientX: startX + 100,
+        clientY: startY + 100
+    }));
+    document.dispatchEvent(new MouseEvent('mousemove', {
+      bubbles: true,
+      clientX: endX,
+      clientY: endY
+    }));
+    toDrop.dispatchEvent(new MouseEvent('mouseup', {
+      bubbles: true,
+      clientX: endX,
+      clientY: endY
+    }));
+}
+
 function getSelectedAnswers(taskType, answerInputs) {
     let selected = [];
 
@@ -233,6 +301,16 @@ function getSelectedAnswers(taskType, answerInputs) {
     case 'custom_number':
         for (let i = 0; i < answerInputs.length; i++) {
             selected.push(CustomNumberAnswerSelected(answerInputs[i]));
+        }
+        break;
+    case 'drag_drop':
+        for(let i=0; i<answerInputs[1].length; i++) {
+            if(answerInputs[1][i].querySelector('div')) {
+                selected.push(getTaskDDfieldID(answerInputs[1][i].firstChild, 'drag'))
+            }
+            else {
+                selected.push(false);
+            }
         }
         break;
     default:
@@ -352,6 +430,9 @@ function getTask() {
     }
     else if (type == 'custom_number') {
         answers = getTaskCustomNumberFields();
+    }
+    else if (type == 'drag_drop') {
+        answers = getTaskDragDropFields();
     }
     else {
         //TODO
@@ -536,10 +617,10 @@ async function main_loop() {
         }
         
         
-    });
+    })
 
     // Listen for key press
-    document.addEventListener('keydown', function(event) {
+    document.addEventListener('keydown', async function(event) {
         if (event.key === 'i' || event.key === 'I') {
             if (current_task != null) {
                 console.log('URL:', url);
