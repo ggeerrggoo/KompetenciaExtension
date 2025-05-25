@@ -591,7 +591,7 @@ function loadSettings() {
 
 async function fetchAnnouncements() {
     chrome.storage.sync.get({lastAnnouncment: "2025-05-25T04:26:14.000Z"},async (items) => {
-        const announcementUrl = 'http://localhost:3000/announcements/';
+        const announcementUrl = settings.url+'announcements/';
         
         const response = await fetchTaskFromBackground(announcementUrl+items.lastAnnouncment, {
             method: 'GET',
@@ -629,6 +629,7 @@ async function fetchAnnouncements() {
 var settings = {};
 async function main_loop() {
     loadSettings();
+    await new Promise(resolve => setTimeout(resolve, 500)); // Wait for settings to load
     fetchAnnouncements();
 
     let last_url = '';
