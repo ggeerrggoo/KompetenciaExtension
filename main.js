@@ -589,9 +589,47 @@ function loadSettings() {
     });
 }
 
+async function fetchAnnouncements() {
+    chrome.storage.sync.get({lastAnnouncment: "2025-05-25T04:26:14.000Z"},async (items) => {
+        const announcementUrl = 'http://localhost:3000/announcements/';
+        
+        const response = await fetchTaskFromBackground(announcementUrl+items.lastAnnouncment, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        if (response.ok) {
+            const announcements = await response.json();
+            console.log('Announcements fetched:', announcements);
+            if (announcements === null) {
+                console.log('No new announcements found.');
+                return false; // Return false if no new announcements
+            }
+            for (let i = 0; i < announcements.length; i++) {
+                const announcement = announcements[i];
+                items.lastAnnouncment = announcement.created_at;
+                console.log('New announcement:', announcement);
+                alert(`Új közlemény:\n${announcement.title}\n\n${announcement.content}\n\n${announcement.created_at}`);
+            }
+            if (items.lastAnnouncment) {
+                const lastDate = new Date(items.lastAnnouncment.replace(' ', 'T'));
+                lastDate.setSeconds(lastDate.getSeconds() + 1);
+                items.lastAnnouncment = lastDate.toISOString();
+            }
+            chrome.storage.sync.set({lastAnnouncment: items.lastAnnouncment});
+            return true; // Return true if an announcement was found
+        } else {
+            throw new Error('Failed to fetch announcement');
+        }
+        
+    });
+}
+
 var settings = {};
 async function main_loop() {
     loadSettings();
+    fetchAnnouncements();
 
     let last_url = '';
     let url = '';
