@@ -490,7 +490,7 @@ function hasAnswers(current_task) {
 
 async function syncTaskWithDB(current_task) {   
 
-    const dburl = 'http://strong-finals.gl.at.ply.gg:36859/solution'; // http://strong-finals.gl.at.ply.gg:36859/solution
+    const dburl = settings.url+"solution/"; // http://strong-finals.gl.at.ply.gg:36859/solution
 
     if(!hasAnswers(current_task)) {
         let task = {
@@ -504,16 +504,19 @@ async function syncTaskWithDB(current_task) {
         };
         
         try {
-            const reply = await fetchTaskFromBackground(dburl+"/?task="+JSON.stringify(task)+"&user="+JSON.stringify(user));
-            if (reply.status == 200) {
-                let data = await reply.json();
-                return data;
-            }
-            if (reply.status != 200) {
+            //console.log('Fetching solution for task:', task, 'and user:', user);
+            const reply = await sendRequestToBackground({
+                type: 'getSolution',
+                task: task,
+                user: user
+            });
+            if(reply.status != "ok"){
                 console.log('Error getting solution:', reply);
-                console.log('task  sent:', task);
+                console.log('task sent:', reply);
                 return;
             }
+            //console.log('Solution fetched successfully', reply);
+            return reply.solution;
         }
         catch (error) {
             console.log('Error fetching task from DB:', error);
@@ -533,22 +536,16 @@ async function syncTaskWithDB(current_task) {
             azonosito: getUserID()
         };
         try {
-            const reply = await fetchTaskFromBackground(dburl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    task: task,
-                    user: user
-                })
+            const reply = await sendRequestToBackground({
+                type: 'postSolution',
+                task: task,
+                user: user
             });
-            if (reply.status == 200) {
+            //console.log('Posting solution to DB:', task, 'for user:', user);
+            if (reply && reply.status === "ok") {
                 console.log('Solution posted successfully', reply);
-                let data = await reply.json();
-                return data;
-            }
-            if (reply.status != 200) {
+                return reply;
+            } else {
                 console.log('Error posting solution:', reply);
                 return;
             }
@@ -620,17 +617,73 @@ async function fetchAnnouncements() {
             chrome.storage.sync.set({lastAnnouncment: items.lastAnnouncment});
             return true; // Return true if an announcement was found
         } else {
-            throw new Error('Failed to fetch announcement');
+            console.error('Failed to fetch announcement:', response.status, response.error);
+            //throw new Error('Failed to fetch announcement:', response.error);
         }
         
+    });
+}
+
+let port = null;
+let wsOnMessage = null;
+let reqList = [];
+let reqListIndex = 1;
+
+function connectToBackground() {
+    wsOnMessage = (response) => {
+        console.log('Response from background:', response);
+    }
+    port = chrome.runtime.connect();
+
+    port.onMessage.addListener(response => {
+        if(!response || !response.id) {
+            console.log('Invalid response received:', response);
+            return;
+        }
+        if(typeof reqList[response.id] !== 'function') {
+            console.log('No request function found for response ID:', response.id);
+            return;
+        }
+        reqList[response.id](response);
+    });
+
+    port.onDisconnect.addListener(() => {
+        console.warn('Port disconnected, reconnecting...');
+        port = null;
+        connectToBackground();
+    });
+}
+
+async function sendRequestToBackground(request) {
+    return new Promise((resolve, reject) => {
+        if (port == null) {
+            console.log('Port is not connected, reconnecting...');
+            connectToBackground();
+        }
+        if (typeof request !== 'object' || !request.type) {
+            console.error('Invalid request format:', request);
+            reject(new Error('Invalid request format'));
+            return;
+        }
+        request.id = reqListIndex++;
+        //console.log('Sending request to background:', request);
+        reqList[request.id] = (response) => {
+            resolve(response);
+            return;
+        };
+        
+        port.postMessage(request);
     });
 }
 
 var settings = {};
 async function main_loop() {
     loadSettings();
-    await new Promise(resolve => setTimeout(resolve, 500)); // Wait for settings to load
-    fetchAnnouncements();
+    await new Promise(resolve => setTimeout(resolve, 100)); // Wait for settings to load
+    
+    connectToBackground();
+    await new Promise(resolve => setTimeout(resolve, 400)); // Wait for settings to load
+    //fetchAnnouncements();
 
     let last_url = '';
     let url = '';
@@ -654,8 +707,6 @@ async function main_loop() {
                 }
             }
         }
-        
-        
     })
 
     // Listen for key press
@@ -672,11 +723,22 @@ async function main_loop() {
                 syncTaskWithDB(current_task);
             }
         }
+        else if(event.key === 't' || event.key === 'T') {
+            if (current_task != null) {
+                console.log(await sendRequestToBackground({
+                    type: 'getSolution',
+                    task: JSON.parse(JSON.stringify(current_task)),
+                    user: {
+                        name: settings.name,
+                        azonosito: getUserID()
+                    }
+                }));
+            }
+        }
     });
 
     while (true) {
         url = window.location.href;
-
         //idle loop, no new task found
         if (last_url == url && last_url != '') {
             await new Promise(resolve => setTimeout(resolve, 500));
