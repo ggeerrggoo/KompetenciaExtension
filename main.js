@@ -207,10 +207,10 @@ function mousedowndiv(div) {
 
 //select option with specific textContent from a dropdown
 function selectDropdownOption(div, option) {
-    //open the dropdown
     if (option == false) {
         return;
     }
+    //open the dropdown
     mousedowndiv(div);
     
     const options = document.querySelectorAll('div.ng-option');
@@ -271,7 +271,6 @@ function getSelectedAnswers(taskType, answerInputs) {
             }
         }
         break;
-    
     case 'select_image':
         for (let i = 0; i < answerInputs.length; i++) {
             if (isImageAnswerSelected(answerInputs[i])) {
@@ -282,13 +281,11 @@ function getSelectedAnswers(taskType, answerInputs) {
             }
         }
         break;
-    
     case 'dropdown':
         for (let i = 0; i < answerInputs.length; i++) {
             selected.push(dropdownAnswerSelected(answerInputs[i]));
         }
         break;
-    
     case 'category_select':
         for (let i = 0; i < answerInputs.length; i++) {
             let currentSelected = [];
@@ -308,7 +305,7 @@ function getSelectedAnswers(taskType, answerInputs) {
             if(answerInputs[1][i].querySelector('div')) {
                 selected.push(getTaskDDfieldID(answerInputs[1][i].firstChild, 'drag'))
             }
-            else {
+            else {  
                 selected.push(false);
             }
         }
@@ -321,6 +318,8 @@ function getSelectedAnswers(taskType, answerInputs) {
 }
 
 function clearSelectedAnswers(taskType,divs) {
+    //this whole thing isnt needed, because we wont autofill answers if there are already answers
+    //but it is here because why not, half of it isnt implemented anyway
     let selectedAnswers = getSelectedAnswers(taskType, divs);
 
     switch (taskType) {
@@ -353,13 +352,17 @@ function clearSelectedAnswers(taskType,divs) {
         case 'custom_number':
             //not needed, because the input will let stuff be overriden
             break;
+        case 'drag_drop':
+            //not really possible, cant know where you need to drag it back to, if I drag it to wrogn spot, it just wont move
+            //so this is not implemented
+            break;
         default:
-            console.log('Task type not supported for auto answer clearing YET.');
+            console.log('Task type not supported for auto answer clearing (yet).');
             break;
     }
 }
 
-function writeAnswers(taskType, answers, divs) {
+async function writeAnswers(taskType, answers, divs) {
 
     clearSelectedAnswers(taskType, divs);
 
@@ -402,8 +405,22 @@ function writeAnswers(taskType, answers, divs) {
                 }
             }
             break;
+        case 'drag_drop':
+            for (let i = 0; i < divs[1].length; i++) {
+                if (answers[i] != false) {
+                    // Find the index of answers[i] in divs[2] (drag IDs)
+                    let dragDiv = divs[0][divs[2].indexOf(answers[i])];
+                    let dropDiv = divs[1][i];
+                    selectDragDropAnswer(dragDiv, dropDiv);
+                    while(dropDiv.classList.contains('cdk-drop-list-receiving') || dropDiv.classList.contains('cdk-drop-list-dragging') || dropDiv.classList.contains('cdk-drag-animating')) {
+                        await new Promise(resolve => setTimeout(resolve, 25)); // wait for the drag and drop animation to complete
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 50)); // extra buffer wait
+                }
+            }
+            break;
         default:
-            console.log('Task type not supported for auto answer writing YET.');
+            console.log('Task type not supported for auto answer writing yet.');
             break;
     }
 }
@@ -626,7 +643,7 @@ async function fetchAnnouncements() {
 
 let port = null;
 let wsOnMessage = null;
-let reqList = [];
+let reqList = new Map();
 let reqListIndex = 1;
 
 function connectToBackground() {
@@ -636,19 +653,29 @@ function connectToBackground() {
     port = chrome.runtime.connect();
 
     port.onMessage.addListener(response => {
-        if(!response || !response.id) {
-            console.log('Invalid response received:', response);
+        if(!response || response.id === undefined) {
+            if(response.type === 'wsConnected') {
+                console.log('WebSocket connected to background script.');
+                return;
+            }
+            if (response.type === 'wsError' || response.type === 'wsClosed') {
+                console.log('WebSocket error/closed:', response.error || response.type);
+                connectToBackground(); // Reconnect to background
+                return;
+            }
+            console.log('Invalid response received:', response, response.id);
             return;
         }
-        if(typeof reqList[response.id] !== 'function') {
+        if (typeof reqList.get(response.id) !== 'function') {
             console.log('No request function found for response ID:', response.id);
             return;
         }
-        reqList[response.id](response);
+        reqList.get(response.id)(response);
+        reqList.delete(response.id);
     });
 
     port.onDisconnect.addListener(() => {
-        console.warn('Port disconnected, reconnecting...');
+        console.log('Port disconnected, reconnecting...');
         port = null;
         connectToBackground();
     });
@@ -667,10 +694,10 @@ async function sendRequestToBackground(request) {
         }
         request.id = reqListIndex++;
         //console.log('Sending request to background:', request);
-        reqList[request.id] = (response) => {
+        reqList.set(request.id, (response) => {
             resolve(response);
             return;
-        };
+        });
         
         port.postMessage(request);
     });
@@ -682,7 +709,7 @@ async function main_loop() {
     await new Promise(resolve => setTimeout(resolve, 100)); // Wait for settings to load
     
     connectToBackground();
-    await new Promise(resolve => setTimeout(resolve, 400)); // Wait for settings to load
+    await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for bg connection
     //fetchAnnouncements();
 
     let last_url = '';
@@ -739,13 +766,13 @@ async function main_loop() {
 
     while (true) {
         url = window.location.href;
-        //idle loop, no new task found
+        //idle loop, no new url found
         if (last_url == url && last_url != '') {
             await new Promise(resolve => setTimeout(resolve, 500));
             continue;
         }
         
-        //when a new task is found
+        //when a new url is found
         //wait for the page to show a question
         console.log('New URL, waiting for task...');
         while (getTaskQuestion() == 'No question found.') {
@@ -757,8 +784,7 @@ async function main_loop() {
 
         if (sendResults && current_task != null && hasAnswers(current_task)) {
                 console.log('New task found, syncing old one with DB...');
-                let asdf = syncTaskWithDB(JSON.parse(JSON.stringify(current_task)));
-                console.log('Sync result:', asdf);
+                syncTaskWithDB(JSON.parse(JSON.stringify(current_task)));
         }
         sendResults = true;
         current_task = getTask();
@@ -767,7 +793,7 @@ async function main_loop() {
             console.log('Already has answers, skipping autofill...');
             sendResults = false;
         }
-        else if (current_task.type == 'select_text' || current_task.type == 'select_image' || current_task.type == 'dropdown' || current_task.type == 'category_select' || current_task.type == 'custom_number') {
+        else if (current_task.type == 'select_text' || current_task.type == 'select_image' || current_task.type == 'dropdown' || current_task.type == 'category_select' || current_task.type == 'custom_number' || current_task.type == 'drag_drop') {
             try {
                 let queryResult = await syncTaskWithDB(current_task);
                 if (queryResult != null) {
@@ -776,7 +802,7 @@ async function main_loop() {
                     if (queryResult.totalVotes >= settings.minvotes && 100*queryResult.votes / queryResult.totalVotes >= settings.votepercentage) {
                         sendResults = false;
                         console.log('Enough votes and enough percentage of votes.');
-                        writeAnswers(current_task.type, JSON.parse(queryResult.answer), current_task.answerInputs);
+                        await writeAnswers(current_task.type, JSON.parse(queryResult.answer), current_task.answerInputs);
                     }
                     else {
                         console.log('Not enough votes or not enough percentage of votes.');
