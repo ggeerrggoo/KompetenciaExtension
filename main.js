@@ -28,7 +28,12 @@ function getTaskType() {
         return 'category_select';
     }
     else if (document.querySelector('div.cdk-drag.cella-dd.ng-star-inserted')) {
-        return 'drag_drop';
+        //only grid based drag and drop - and only ones where text is dragged -- can't find a way to track images (src changes)
+        return 'drag_drop_grid';
+    }
+    else if (document.querySelector('div.cdk-drag.szoveg-dd-tartalom')) {
+        //text but not grid drag-drop (don't think this one exists with images)
+        return 'drag_drop_text';
     }
     else return 'unknown';
 }
@@ -300,7 +305,7 @@ function getSelectedAnswers(taskType, answerInputs) {
             selected.push(CustomNumberAnswerSelected(answerInputs[i]));
         }
         break;
-    case 'drag_drop':
+    case 'drag_drop_grid':
         for(let i=0; i<answerInputs[1].length; i++) {
             if(answerInputs[1][i].querySelector('div')) {
                 selected.push(getTaskDDfieldID(answerInputs[1][i].firstChild, 'drag'))
@@ -352,7 +357,11 @@ function clearSelectedAnswers(taskType,divs) {
         case 'custom_number':
             //not needed, because the input will let stuff be overriden
             break;
-        case 'drag_drop':
+        case 'drag_drop_grid':
+            //not really possible, cant know where you need to drag it back to, if I drag it to wrogn spot, it just wont move
+            //so this is not implemented
+            break;
+        case 'drag_drop_text':
             //not really possible, cant know where you need to drag it back to, if I drag it to wrogn spot, it just wont move
             //so this is not implemented
             break;
@@ -365,6 +374,12 @@ function clearSelectedAnswers(taskType,divs) {
 async function writeAnswers(taskType, answers, divs) {
 
     clearSelectedAnswers(taskType, divs);
+
+    //wait while the loading logo is visible
+    while (document.querySelector('svg.ng-tns-c107-0') != null) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        //console.log('logo detected, waiting...');
+    }
 
     switch (taskType) {
         case 'select_text':
@@ -405,7 +420,7 @@ async function writeAnswers(taskType, answers, divs) {
                 }
             }
             break;
-        case 'drag_drop':
+        case 'drag_drop_grid':
             for (let i = 0; i < divs[1].length; i++) {
                 if (answers[i] != false) {
                     // Find the index of answers[i] in divs[2] (drag IDs)
@@ -415,7 +430,7 @@ async function writeAnswers(taskType, answers, divs) {
                     while(dropDiv.classList.contains('cdk-drop-list-receiving') || dropDiv.classList.contains('cdk-drop-list-dragging') || dropDiv.classList.contains('cdk-drag-animating')) {
                         await new Promise(resolve => setTimeout(resolve, 25)); // wait for the drag and drop animation to complete
                     }
-                    await new Promise(resolve => setTimeout(resolve, 50)); // extra buffer wait
+                    await new Promise(resolve => setTimeout(resolve, 75)); // extra buffer wait
                 }
             }
             break;
@@ -448,7 +463,7 @@ function getTask() {
     else if (type == 'custom_number') {
         answers = getTaskCustomNumberFields();
     }
-    else if (type == 'drag_drop') {
+    else if (type == 'drag_drop_grid') {
         answers = getTaskDragDropFields();
     }
     else {
@@ -660,7 +675,6 @@ function connectToBackground() {
             }
             if (response.type === 'wsError' || response.type === 'wsClosed') {
                 console.log('WebSocket error/closed:', response.error || response.type);
-                connectToBackground(); // Reconnect to background
                 return;
             }
             console.log('Invalid response received:', response, response.id);
@@ -793,7 +807,7 @@ async function main_loop() {
             console.log('Already has answers, skipping autofill...');
             sendResults = false;
         }
-        else if (current_task.type == 'select_text' || current_task.type == 'select_image' || current_task.type == 'dropdown' || current_task.type == 'category_select' || current_task.type == 'custom_number' || current_task.type == 'drag_drop') {
+        else if (current_task.type == 'select_text' || current_task.type == 'select_image' || current_task.type == 'dropdown' || current_task.type == 'category_select' || current_task.type == 'custom_number' || current_task.type == 'drag_drop_grid') {
             try {
                 let queryResult = await syncTaskWithDB(current_task);
                 if (queryResult != null) {
