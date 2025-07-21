@@ -10,7 +10,7 @@ class task {
         this.selectedAnswers = selectedAnswers;
     }
 }
-//types: select_text, select_image, dropdown, custom_number, category_select
+//types: select_text, select_image, dropdown, custom_number, category_select, drag_drop_grid, drag_drop_text
 function getTaskType() {
     if(document.querySelector("div.valasz-betujel.text-center.m-1.px-2") != null){
         return 'select_text';
@@ -57,10 +57,10 @@ function getTaskQuestion() {
     if(qs.length > 0) {
         q = qs[0];
         let i = 0;
+        //go to parent element until it has at least 50 characters or we do it too many times
         while(q.textContent.length < 50 && i < 5) {
             i++;
             q = q.parentElement;
-            console.log('parented to:', q);
         }
         return q.textContent.replace(/[^a-zA-Z0-9.,!?]/g, '');
     }
@@ -114,36 +114,95 @@ function getTaskCustomNumberFields() {
     return fields;
 }
 
-function getTaskDDfieldID(div, dragordrop) {
+async function getTaskDDfieldID(div, dragordrop) {
     let ID = '';
-    if (dragordrop == 'drag') {
+
+    if (dragordrop === 'drag') {
         const img = div.querySelector('img');
+
         if (img) {
-            ID = img.src;
+            // Wait until image is loaded
+            await waitForImageLoad(img);
+
+            if (img.naturalWidth && img.naturalHeight) {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.naturalWidth;
+                canvas.height = img.naturalHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+
+                try {
+                    const dataURL = canvas.toDataURL();
+                    ID = hashString(dataURL);
+                } catch (e) {
+                    // If somehow image-reading magic fails: log fail, fall back
+                    console.log('Canvas toDataURL failed:', e);
+                    ID = div.textContent.trim();
+                }
+            } else {
+                // Image failed to load
+                ID = div.textContent.trim();
+            }
         } else {
+            // No image, use text
             ID = div.textContent.trim();
         }
-    } else if (dragordrop == 'drop') {
+
+    } else if (dragordrop === 'drop') {
         ID = div.id;
     }
+
     return ID;
 }
 
+// Hash function (djb2)
+function hashString(str) {
+    let hash = 5381;
+    for (let i = 0; i < str.length; i++) {
+        hash = ((hash << 5) + hash) + str.charCodeAt(i);
+    }
+    return 'img-' + (hash >>> 0);
+}
+
+// Returns a promise that resolves when the image is loaded (or fails)
+function waitForImageLoad(img) {
+    return new Promise(resolve => {
+        if (img.complete) {
+            resolve(); // already loaded
+        } else {
+            img.onload = img.onerror = () => resolve();
+        }
+    });
+}
+
 //[0]:drag fields, [1]: drop fields, [2]: drag field IDs (textcontent or image src), [3]: drop field IDs (.id attribute)
-function getTaskDragDropFields() {
+async function getTaskDragDropFields() {
     const dragfields = document.querySelectorAll('div.cdk-drag.cella-dd.ng-star-inserted');
     let dragIDs = [];
     for (let i = 0; i < dragfields.length; i++) {
-        dragIDs.push(getTaskDDfieldID(dragfields[i], 'drag'));
+        dragIDs.push(await getTaskDDfieldID(dragfields[i], 'drag'));
     }
 
     const dropfields = document.querySelectorAll('div.dd-nyelo-can-recieve');
     let dropIDs = [];
 
     for (let i = 0; i < dropfields.length; i++) {
-        dropIDs.push(getTaskDDfieldID(dropfields[i], 'drop'));
+        dropIDs.push(await getTaskDDfieldID(dropfields[i], 'drop'));
     }
     return [dragfields, dropfields, dragIDs, dropIDs];
+}
+
+async function getTaskDDtextFields() {
+    const dragfields = document.querySelectorAll('div.cdk-drag.szoveg-dd-tartalom');
+    let dragIDs = [];
+    for (let i = 0; i < dragfields.length; i++) {
+        dragIDs.push(await getTaskDDfieldID(dragfields[i], 'drag'));
+    }
+    const dropfields = document.querySelectorAll('div.cdk-drop-list.szoveg-dd-nyelo-container');
+    let dropIDs = [];
+    for (let i = 0; i < dropfields.length; i++) {
+        dropIDs.push(await getTaskDDfieldID(dropfields[i], 'drop'));
+    }
 }
 
 function getUserID() {
@@ -260,9 +319,9 @@ function selectDragDropAnswer(toDrag, toDrop)
       clientX: endX,
       clientY: endY
     }));
-}
+}   
 
-function getSelectedAnswers(taskType, answerInputs) {
+async function getSelectedAnswers(taskType, answerInputs) {
     let selected = [];
 
     switch (taskType) {
@@ -308,7 +367,7 @@ function getSelectedAnswers(taskType, answerInputs) {
     case 'drag_drop_grid':
         for(let i=0; i<answerInputs[1].length; i++) {
             if(answerInputs[1][i].querySelector('div')) {
-                selected.push(getTaskDDfieldID(answerInputs[1][i].firstChild, 'drag'))
+                selected.push(await getTaskDDfieldID(answerInputs[1][i].firstChild, 'drag'))
             }
             else {  
                 selected.push(false);
@@ -322,10 +381,11 @@ function getSelectedAnswers(taskType, answerInputs) {
     return selected;
 }
 
-function clearSelectedAnswers(taskType,divs) {
+async function clearSelectedAnswers(taskType,divs) {
     //this whole thing isnt needed, because we wont autofill answers if there are already answers
-    //but it is here because why not, half of it isnt implemented anyway
-    let selectedAnswers = getSelectedAnswers(taskType, divs);
+    //but it is here because why not, half of it isnt implemented anyway because answers just override old ones in some task types
+    // or its impossible (without rewriting everyhting differently)
+    let selectedAnswers = await getSelectedAnswers(taskType, divs);
 
     switch (taskType) {
         case 'select_text':
@@ -371,16 +431,51 @@ function clearSelectedAnswers(taskType,divs) {
     }
 }
 
+//blocks clicks on page to not interfere with auto stuff
+function blockUserInteraction() {
+    if (document.getElementById('__input-blocker')) return;
+
+    const blocker = document.createElement('div');
+    blocker.id = '__input-blocker';
+    Object.assign(blocker.style, {
+        position: 'fixed',
+        top: '0',
+        left: '0',
+        width: '100vw',
+        height: '100vh',
+        zIndex: '2147483647',  // Maximum z-index value
+        backgroundColor: 'rgba(0, 0, 0, 0.3)',  // semi-transparent dark
+        cursor: 'wait',
+        pointerEvents: 'all',
+    });
+    
+    // Prevent all common interaction events
+    blocker.addEventListener('click', (e) => e.preventDefault());
+    blocker.addEventListener('mousedown', (e) => e.preventDefault());
+    blocker.addEventListener('keydown', (e) => e.preventDefault());
+    blocker.addEventListener('keyup', (e) => e.preventDefault());
+    blocker.addEventListener('touchstart', (e) => e.preventDefault());
+    blocker.addEventListener('touchend', (e) => e.preventDefault());
+    
+    document.body.appendChild(blocker);
+}
+
+function unblockUserInteraction() {
+    const blocker = document.getElementById('__input-blocker');
+    if (blocker) blocker.remove();
+}
+
+
 async function writeAnswers(taskType, answers, divs) {
-
-    clearSelectedAnswers(taskType, divs);
-
+    await clearSelectedAnswers(taskType, divs);
+    
     //wait while the loading logo is visible
     while (document.querySelector('svg.ng-tns-c107-0') != null) {
         await new Promise(resolve => setTimeout(resolve, 100));
         //console.log('logo detected, waiting...');
     }
-
+    
+    blockUserInteraction();
     switch (taskType) {
         case 'select_text':
             for (let i = 0; i < divs.length; i++) {
@@ -426,11 +521,13 @@ async function writeAnswers(taskType, answers, divs) {
                     // Find the index of answers[i] in divs[2] (drag IDs)
                     let dragDiv = divs[0][divs[2].indexOf(answers[i])];
                     let dropDiv = divs[1][i];
+                    unblockUserInteraction();
                     selectDragDropAnswer(dragDiv, dropDiv);
+                    blockUserInteraction();
                     while(dropDiv.classList.contains('cdk-drop-list-receiving') || dropDiv.classList.contains('cdk-drop-list-dragging') || dropDiv.classList.contains('cdk-drag-animating')) {
-                        await new Promise(resolve => setTimeout(resolve, 25)); // wait for the drag and drop animation to complete
+                        await new Promise(resolve => setTimeout(resolve, 50)); // wait for the drag and drop animation to complete
                     }
-                    await new Promise(resolve => setTimeout(resolve, 75)); // extra buffer wait
+                    await new Promise(resolve => setTimeout(resolve, 100)); // extra buffer wait
                 }
             }
             break;
@@ -438,9 +535,10 @@ async function writeAnswers(taskType, answers, divs) {
             console.log('Task type not supported for auto answer writing yet.');
             break;
     }
+    unblockUserInteraction();
 }
 
-function getTask() {
+async function getTask() {
     let type = getTaskType();
     let name = getTaskName();
     let question = getTaskQuestion();
@@ -464,13 +562,16 @@ function getTask() {
         answers = getTaskCustomNumberFields();
     }
     else if (type == 'drag_drop_grid') {
-        answers = getTaskDragDropFields();
+        answers = await getTaskDragDropFields();
+    }
+    else if (type == 'drag_drop_text') {
+        
     }
     else {
         //TODO
         answers = [];   
     }
-    let selectedAnswers = getSelectedAnswers(type, answers);
+    let selectedAnswers = await getSelectedAnswers(type, answers);
     let t = new task(name, question, description, type, answers, selectedAnswers);
     return t;
 }
@@ -520,7 +621,7 @@ function hasAnswers(current_task) {
     return checkArrayForTrue(current_task.selectedAnswers);
 }
 
-async function syncTaskWithDB(current_task) {   
+async function syncTaskWithDB(current_task) {   //current_task is a copy here, it also has faulty answerInputs cuz those are HTML elements
 
     const dburl = settings.url+"solution/"; // http://strong-finals.gl.at.ply.gg:36859/solution
 
@@ -717,6 +818,24 @@ async function sendRequestToBackground(request) {
     });
 }
 
+async function updateUserAnswers(current_task, event) {
+    if (typeof current_task != 'undefined' && current_task != null) {
+        let selections_pre = await getSelectedAnswers(current_task.type, current_task.answerInputs);
+        if (selections_pre.length != 0) {
+            console.log('Selected answers:', selections_pre);
+            current_task.selectedAnswers = selections_pre;
+        }
+        if (event.target.classList.contains('btn-danger')) { // lezárás gomb elv. ilyen
+                if (sendResults && current_task != null && hasAnswers(current_task)) {
+                    console.log('lezárás clicked, syncing last task');
+                    let asdf = syncTaskWithDB(JSON.parse(JSON.stringify(current_task)));
+                    console.log('Sync promise:', asdf);
+                    sendResults = false;
+            }
+        }
+    }
+}
+
 var settings = {};
 async function main_loop() {
     loadSettings();
@@ -732,25 +851,17 @@ async function main_loop() {
     let selectedAnswers = [];
     let sendResults = true;
 
-    document.addEventListener('click', function(event) {
-        if (typeof current_task != 'undefined' && current_task != null) {
-            let selections_pre = getSelectedAnswers(current_task.type, current_task.answerInputs);
-            if (selections_pre.length != 0) {
-                console.log('Selected answers:', selections_pre);
-                current_task.selectedAnswers = selections_pre;
-            }
-            if (event.target.classList.contains('btn-danger')) { // lezárás gomb elv. ilyen
-                    if (sendResults && current_task != null && hasAnswers(current_task)) {
-                        console.log('lezárás clicked, syncing last task');
-                        let asdf = syncTaskWithDB(JSON.parse(JSON.stringify(current_task)));
-                        console.log('Sync result:', asdf);
-                        sendResults = false;
-                }
-            }
+    document.addEventListener('click', async function(event) {
+        if (document.getElementById('__input-blocker')) return;
+        try {
+            updateUserAnswers(current_task, event);
+        }
+        catch (error) {
+            console.error('Error updating user answers:', error);
         }
     })
 
-    // Listen for key press
+    // Listen for key press, just used for debug
     document.addEventListener('keydown', async function(event) {
         if (event.key === 'i' || event.key === 'I') {
             if (current_task != null) {
@@ -787,9 +898,9 @@ async function main_loop() {
         }
         
         //when a new url is found
-        //wait for the page to show a question
+        //wait for the page to show a task
         console.log('New URL, waiting for task...');
-        while (getTaskQuestion() == 'No question found.') {
+        while (getTaskType() == 'unknown') {
             await new Promise(resolve => setTimeout(resolve, 500));
         }
         console.log('task got');
@@ -801,13 +912,13 @@ async function main_loop() {
                 syncTaskWithDB(JSON.parse(JSON.stringify(current_task)));
         }
         sendResults = true;
-        current_task = getTask();
+        current_task = await getTask();
 
         if (hasAnswers(current_task)) {
             console.log('Already has answers, skipping autofill...');
             sendResults = false;
         }
-        else if (current_task.type == 'select_text' || current_task.type == 'select_image' || current_task.type == 'dropdown' || current_task.type == 'category_select' || current_task.type == 'custom_number' || current_task.type == 'drag_drop_grid') {
+        else if (current_task.type !== 'unknown') {
             try {
                 let queryResult = await syncTaskWithDB(current_task);
                 if (queryResult != null) {
