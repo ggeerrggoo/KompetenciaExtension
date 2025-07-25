@@ -288,8 +288,25 @@ function selectDropdownOption(div, option) {
     console.log("didnt find option:", option);
 }
 
-function selectDragDropAnswer(toDrag, toDrop)
+function placeDebugMarker(x, y, color = 'red') {
+    const marker = document.createElement('div');
+    marker.style.position = 'fixed';
+    marker.style.left = `${x - 5}px`;
+    marker.style.top = `${y - 5}px`;
+    marker.style.width = '10px';
+    marker.style.height = '10px';
+    marker.style.backgroundColor = color;
+    marker.style.zIndex = '9999';
+    marker.style.pointerEvents = 'none';
+    marker.style.border = '1px solid black';
+    document.body.appendChild(marker);
+    marker.classList.add('debug-marker');
+}
+
+async function selectDragDropAnswer(toDrag, toDrop)
 {
+    await new Promise(resolve => setTimeout(resolve, 75));
+
     const dragRect = toDrag.getBoundingClientRect();
     const dropRect = toDrop.getBoundingClientRect();
     
@@ -298,27 +315,32 @@ function selectDragDropAnswer(toDrag, toDrop)
     
     const endX = dropRect.left + dropRect.width / 2;
     const endY = dropRect.top + dropRect.height / 2;
+
+    placeDebugMarker(startX, startY, 'blue');
+    placeDebugMarker(endX, endY, 'green');
+    await new Promise(resolve => setTimeout(resolve, 250)); // time to look at the markers
         
     toDrag.dispatchEvent(new MouseEvent('mousedown', {
-      bubbles: true,
-      clientX: startX,
-      clientY: startY
+        bubbles: true,
+        clientX: startX,
+        clientY: startY
     }));
-    document.dispatchEvent(new MouseEvent('mousemove', {
+    document.dispatchEvent(new MouseEvent('mousemove', {    
         bubbles: true,
         clientX: startX + 100,
         clientY: startY + 100
     }));
     document.dispatchEvent(new MouseEvent('mousemove', {
-      bubbles: true,
-      clientX: endX,
-      clientY: endY
+        bubbles: true,
+        clientX: endX,
+        clientY: endY
     }));
     toDrop.dispatchEvent(new MouseEvent('mouseup', {
-      bubbles: true,
-      clientX: endX,
-      clientY: endY
+        bubbles: true,
+        clientX: endX,
+        clientY: endY
     }));
+    document.querySelectorAll('.debug-marker').forEach(e => e.remove());
 }   
 
 async function getSelectedAnswers(taskType, answerInputs) {
@@ -435,36 +457,44 @@ async function clearSelectedAnswers(taskType,divs) {
 function blockUserInteraction() {
     if (document.getElementById('__input-blocker')) return;
 
+    //window.scrollTo(0, 0); // scroll to top
     const blocker = document.createElement('div');
     blocker.id = '__input-blocker';
     Object.assign(blocker.style, {
         position: 'fixed',
         top: '0',
         left: '0',
-        width: '100vw',
-        height: '100vh',
-        zIndex: '2147483647',  // Maximum z-index value
-        backgroundColor: 'rgba(0, 0, 0, 0.3)',  // semi-transparent dark
-        cursor: 'wait',
-        pointerEvents: 'all',
+        width: '${window.innerWidth*4}px',
+        height: '${window.innerHeight*4}px',
+        background: 'rgba(0, 0, 0, 0.25)', // semi-transparent background
+        zIndex: '99999',
+        cursor: 'wait'
     });
-    
-    // Prevent all common interaction events
-    blocker.addEventListener('click', (e) => e.preventDefault());
-    blocker.addEventListener('mousedown', (e) => e.preventDefault());
-    blocker.addEventListener('keydown', (e) => e.preventDefault());
-    blocker.addEventListener('keyup', (e) => e.preventDefault());
-    blocker.addEventListener('touchstart', (e) => e.preventDefault());
-    blocker.addEventListener('touchend', (e) => e.preventDefault());
-    
     document.body.appendChild(blocker);
 }
 
 function unblockUserInteraction() {
+    // Remove the blocker
     const blocker = document.getElementById('__input-blocker');
     if (blocker) blocker.remove();
+    // Restore scroll
+    document.body.style.overflow = '';
+    document.body.style.height = '';
 }
 
+function zoomOut() {
+    let oldZoom = document.body.style.zoom;
+    document.body.style.zoom = '25%';
+    let tkelo = document.querySelector("tk-elonezet");
+    if (tkelo) tkelo.style.height = "3000px"; // for some reason the page doesnt extend automatically, so this is a workaround
+    return oldZoom;
+}
+
+function zoomIn(oldZoom) {
+    document.body.style.zoom = oldZoom;
+    let tkelo = document.querySelector("tk-elonezet");
+    if (tkelo) tkelo.style.height = "100%"; // reset height to default
+}
 
 async function writeAnswers(taskType, answers, divs) {
     await clearSelectedAnswers(taskType, divs);
@@ -475,7 +505,6 @@ async function writeAnswers(taskType, answers, divs) {
         //console.log('logo detected, waiting...');
     }
     
-    blockUserInteraction();
     switch (taskType) {
         case 'select_text':
             for (let i = 0; i < divs.length; i++) {
@@ -516,20 +545,40 @@ async function writeAnswers(taskType, answers, divs) {
             }
             break;
         case 'drag_drop_grid':
+            blockUserInteraction();
+            let fails = 0;
+            let oldZoom = zoomOut(); // zoom out to make sure everything is on-screen
             for (let i = 0; i < divs[1].length; i++) {
                 if (answers[i] != false) {
                     // Find the index of answers[i] in divs[2] (drag IDs)
                     let dragDiv = divs[0][divs[2].indexOf(answers[i])];
                     let dropDiv = divs[1][i];
                     unblockUserInteraction();
-                    selectDragDropAnswer(dragDiv, dropDiv);
+                    await selectDragDropAnswer(dragDiv, dropDiv);
                     blockUserInteraction();
                     while(dropDiv.classList.contains('cdk-drop-list-receiving') || dropDiv.classList.contains('cdk-drop-list-dragging') || dropDiv.classList.contains('cdk-drag-animating')) {
                         await new Promise(resolve => setTimeout(resolve, 50)); // wait for the drag and drop animation to complete
                     }
                     await new Promise(resolve => setTimeout(resolve, 100)); // extra buffer wait
+                    //check if drag was successful
+                    if (!dropDiv.querySelector('div.cdk-drag.cella-dd.ng-star-inserted')) {
+                        console.log('Drag and drop failed for:', answers[i], " retrying...");
+                        //decrease i -> try again with same index
+                        i--;
+                        fails++;
+                        if (fails > 5) {
+                            console.log('Too many drag and drop failures, going to next one.');
+                            i++;
+                            fails = 0;
+                        }
+                        continue;
+                    }
+                    else {
+                        fails = 0; // reset fails if successful
+                    }
                 }
             }
+            zoomIn(oldZoom); // zoom back in
             break;
         default:
             console.log('Task type not supported for auto answer writing yet.');
@@ -861,21 +910,21 @@ async function main_loop() {
         }
     })
 
-    // Listen for key press, just used for debug
+    // Listen for key presses, just used for debug
     document.addEventListener('keydown', async function(event) {
-        if (event.key === 'i' || event.key === 'I') {
+        if (event.key.toLowerCase() === 'i') {
             if (current_task != null) {
                 console.log('URL:', url);
                 console.log('Current task:', current_task);
             }
         }
-        else if (event.key === 's' || event.key === 'S') {
+        else if (event.key.toLowerCase() === 's') {
             if (current_task != null) {
                 console.log('Syncing task with DB (keybind clicked)...');
                 syncTaskWithDB(current_task);
             }
         }
-        else if(event.key === 't' || event.key === 'T') {
+        else if(event.key.toLowerCase() === 't') {
             if (current_task != null) {
                 console.log(await sendRequestToBackground({
                     type: 'getSolution',
@@ -885,6 +934,15 @@ async function main_loop() {
                         azonosito: getUserID()
                     }
                 }));
+            }
+        }
+        else if (event.ctrlKey && event.key.toLowerCase() === 'b') {
+            if (document.getElementById('__input-blocker')) {
+                console.log('Unblocking user interaction...');
+                unblockUserInteraction();
+            } else {
+                console.log('Blocking user interaction...');
+                blockUserInteraction();
             }
         }
     });
@@ -903,7 +961,7 @@ async function main_loop() {
         while (getTaskType() == 'unknown') {
             await new Promise(resolve => setTimeout(resolve, 500));
         }
-        console.log('task got');
+        console.log('task got: ', getTaskType());
         
         last_url = url;
 
