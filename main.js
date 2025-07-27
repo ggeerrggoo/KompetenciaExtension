@@ -947,6 +947,14 @@ async function main_loop() {
         }
     });
 
+    // mouse move event listener to announce where mouse moves
+    /*document.addEventListener('mousemove', async function(event) {
+        console.log('client:', event.clientX, event.clientY);
+        console.log('page:', event.clientX, event.clientY);
+        console.log('screen:', event.screenX, event.screenY);
+        console.log('scroll:', window.scrollX, window.scrollY);
+    });/* */
+
     while (true) {
         url = window.location.href;
         //idle loop, no new url found
