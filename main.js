@@ -43,9 +43,10 @@ function getTaskName() {
     return tasknames[tasknames.length - 1].textContent;
 }
 
-function getTaskQuestion() {
+function getTaskUniqueID() {
     const q1 = document.querySelectorAll('p#kerdes');
     const q2 = document.querySelectorAll('tk-kerdes-elem');
+    const q3 = document.querySelectorAll('div.ql-editor.szoveg-elem');
     let qs = [];
     if (q1.length > 0) {
         qs = q1;
@@ -53,12 +54,17 @@ function getTaskQuestion() {
     else if (q2.length > 0) {
         qs = q2;
     }
+    else if (q3.length > 0) {
+        qs = q3;
+    }
 
     if(qs.length > 0) {
         q = qs[0];
         let i = 0;
-        //go to parent element until it has at least 50 characters or we do it too many times
-        while(q.textContent.length < 50 && i < 5) {
+        let taskName = getTaskName();
+        //go to parent element until it contanins the task name or we do it 10 times,
+        // hopefully it is enough to make it unique
+        while(!q.textContent.includes(taskName) && i < 10) {
             i++;
             q = q.parentElement;
         }
@@ -234,6 +240,16 @@ function dropdownAnswerSelected(div) {
         return false;
     }
     answer = answer.trim();
+    // some tasks have placeholder text
+    if (div.querySelector('div.ng-placeholder')) {
+        const placeholder = div.querySelector('div.ng-placeholder').textContent.trim();
+        if (answer == placeholder) {
+            return false;
+        }
+        else {
+            answer = answer.replace(placeholder, '').trim();
+        }
+    }
     return answer;
 }
 
@@ -305,7 +321,6 @@ function placeDebugMarker(x, y, color = 'red') {
 
 async function selectDragDropAnswer(toDrag, toDrop)
 {
-    await new Promise(resolve => setTimeout(resolve, 75));
 
     const dragRect = toDrag.getBoundingClientRect();
     const dropRect = toDrop.getBoundingClientRect();
@@ -315,10 +330,6 @@ async function selectDragDropAnswer(toDrag, toDrop)
     
     const endX = dropRect.left + dropRect.width / 2;
     const endY = dropRect.top + dropRect.height / 2;
-
-    placeDebugMarker(startX, startY, 'blue');
-    placeDebugMarker(endX, endY, 'green');
-    await new Promise(resolve => setTimeout(resolve, 250)); // time to look at the markers
         
     toDrag.dispatchEvent(new MouseEvent('mousedown', {
         bubbles: true,
@@ -340,7 +351,6 @@ async function selectDragDropAnswer(toDrag, toDrop)
         clientX: endX,
         clientY: endY
     }));
-    document.querySelectorAll('.debug-marker').forEach(e => e.remove());
 }   
 
 async function getSelectedAnswers(taskType, answerInputs) {
@@ -457,15 +467,15 @@ async function clearSelectedAnswers(taskType,divs) {
 function blockUserInteraction() {
     if (document.getElementById('__input-blocker')) return;
 
-    //window.scrollTo(0, 0); // scroll to top
+    window.scrollTo(0, 0); // scroll to top
     const blocker = document.createElement('div');
     blocker.id = '__input-blocker';
     Object.assign(blocker.style, {
         position: 'fixed',
         top: '0',
         left: '0',
-        width: '${window.innerWidth*4}px',
-        height: '${window.innerHeight*4}px',
+        width: '10000px',
+        height: '10000px',
         background: 'rgba(0, 0, 0, 0.25)', // semi-transparent background
         zIndex: '99999',
         cursor: 'wait'
@@ -477,9 +487,6 @@ function unblockUserInteraction() {
     // Remove the blocker
     const blocker = document.getElementById('__input-blocker');
     if (blocker) blocker.remove();
-    // Restore scroll
-    document.body.style.overflow = '';
-    document.body.style.height = '';
 }
 
 function zoomOut() {
@@ -590,7 +597,7 @@ async function writeAnswers(taskType, answers, divs) {
 async function getTask() {
     let type = getTaskType();
     let name = getTaskName();
-    let question = getTaskQuestion();
+    let question = getTaskUniqueID();
     let description = getTaskDescription();
     let answers = null;
     if (type == 'select_text' || type == 'select_image') {
@@ -874,14 +881,6 @@ async function updateUserAnswers(current_task, event) {
             console.log('Selected answers:', selections_pre);
             current_task.selectedAnswers = selections_pre;
         }
-        if (event.target.classList.contains('btn-danger')) { // lezárás gomb elv. ilyen
-                if (sendResults && current_task != null && hasAnswers(current_task)) {
-                    console.log('lezárás clicked, syncing last task');
-                    let asdf = syncTaskWithDB(JSON.parse(JSON.stringify(current_task)));
-                    console.log('Sync promise:', asdf);
-                    sendResults = false;
-            }
-        }
     }
 }
 
@@ -900,10 +899,20 @@ async function main_loop() {
     let selectedAnswers = [];
     let sendResults = true;
 
+    let autoNext = false;
+
     document.addEventListener('click', async function(event) {
         if (document.getElementById('__input-blocker')) return;
         try {
             updateUserAnswers(current_task, event);
+            if (event.target.classList.contains('btn-danger')) { // lezárás gomb elv. ilyen
+                if (sendResults && current_task != null && hasAnswers(current_task)) {
+                    console.log('lezárás clicked, syncing last task');
+                    let asdf = syncTaskWithDB(JSON.parse(JSON.stringify(current_task)));
+                    console.log('Sync promise:', asdf);
+                    sendResults = false;
+            }
+        }
         }
         catch (error) {
             console.error('Error updating user answers:', error);
@@ -994,6 +1003,16 @@ async function main_loop() {
                         sendResults = false;
                         console.log('Enough votes and enough percentage of votes.');
                         await writeAnswers(current_task.type, JSON.parse(queryResult.answer), current_task.answerInputs);
+                        await new Promise(resolve => setTimeout(resolve, 300));
+                        //scroll to bottom of the page
+                        
+                        const buttons = document.querySelectorAll('button.btn.btn-secondary.d-block');
+                        if (autoNext && buttons.length == 2) {
+                            clickdiv(buttons[buttons.length - 1]);
+                            window.scrollTo(0, document.body.scrollHeight);
+                            await new Promise(resolve => setTimeout(resolve, 50));
+                            console.log('Answers written and task submitted.');
+                        }
                     }
                     else {
                         console.log('Not enough votes or not enough percentage of votes.');
