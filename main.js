@@ -59,7 +59,7 @@ function getTaskUniqueID() {
     }
 
     if(qs.length > 0) {
-        q = qs[0];
+        let q = qs[0];
         let text = q.textContent.trim();
         let prev_text = q.textContent.trim();
         let i = 0;
@@ -187,6 +187,154 @@ function waitForImageLoad(img) {
     });
 }
 
+let taskStatusIndex = 0;
+
+function repositionTaskStatuses(scale = -1) {
+    try {
+        if (scale === -1) {
+            scale = 1 / getCurrentScale();
+        }
+        console.log(getCurrentScale(), scale);
+        const tasks = document.querySelectorAll('[id^="__tk_task_"]');
+        tasks.forEach((task, index) => {
+            // Scale the spacing between task statuses based on the zoom scale
+            const scaledSpacing = 32 * scale;
+            task.style.bottom = (50 + index * scaledSpacing) + 'px';
+        });
+    } catch (e) {
+        console.log('repositionTaskStatuses failed', e);
+    }
+}
+function scaleTaskStatuses(scale) {
+    try {
+        const statuses = document.querySelectorAll('[id^="__tk_task_"]');
+        statuses.forEach((status) => {
+            status.style.transformOrigin = 'bottom right';
+            status.style.transform = `scale(${scale})`;
+        });
+        // Also reposition with scaled spacing
+        repositionTaskStatuses(scale);
+    } catch (e) {
+        console.log('scaleTaskStatuses error', e);
+    }
+}
+
+function getCurrentScale() {
+    try {
+        const z = document.body.style.zoom;
+        if (z && z.endsWith('%')) {
+            const pct = parseFloat(z.slice(0, -1));
+            if (!isNaN(pct) && pct > 0) {
+                return (pct / 100); // Return the inverse scale (e.g., 25% -> 4)
+            }
+        }
+        return 1; // Default scale if no zoom is applied
+    } catch (e) {
+        return 1;
+    }
+}
+
+class taskStatus {
+    constructor(text, state = 'processing') {
+        this.text = text + (text.endsWith(".") ? "" : "...");
+        this.state = state;
+        this.id = `__tk_task_${++taskStatusIndex}`;
+        this.element = this.createElement();
+        document.body.appendChild(this.element);
+        let existingTasks = document.querySelectorAll('[id^="__tk_task_"]');
+        if(existingTasks.length)
+            this.element.style.bottom = (50 + (existingTasks.length - 1) * 32 * getCurrentScale()) + 'px';
+    }
+
+    createElement() {
+        const el = document.createElement('div');
+        el.id = this.id;
+        el.textContent = `${this.text}`;
+        Object.assign(el.style, {
+            position: 'fixed',
+            right: '12px',
+            bottom: '50px', // above main status
+            padding: '6px 8px',
+            background: 'rgba(70,130,180,0.9)', // Steel blue for "in progress"
+            color: 'white',
+            fontSize: '11px',
+            borderRadius: '4px',
+            zIndex: '2147483647',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+            maxWidth: '280px',
+            lineHeight: '1.2',
+            pointerEvents: 'none',
+            opacity: '1',
+            transition: 'opacity 1s ease'
+        });
+        return el;
+    }
+
+    set_text(text) {
+        this.text = text;
+        this.element.textContent = `${text}`;
+    }
+
+    succeed(text = this.text) {
+        this.state = 'done';
+        this.element.textContent = `${text}`;
+        this.element.style.background = 'rgba(34, 170, 34, 0.9)';
+        setTimeout(() => {
+            this.element.style.opacity = '0';
+            setTimeout(() => {
+                this.destroy();
+            }, 500);
+        }, 500);
+    }
+
+    error(text = this.text) {
+        this.state = 'error';
+        this.element.textContent = `${text}`;
+        this.element.style.background = 'rgba(170,34,34,0.9)';
+        setTimeout(() => {
+            this.element.style.transition = 'opacity 2s ease';
+            this.element.style.opacity = '0';
+            setTimeout(() => {
+                this.destroy();
+            }, 2000);
+        }, 4000);
+    }
+
+    fail(text = this.text) {
+        this.state = 'failed';
+        this.element.textContent = `${text}`;
+        this.element.style.background = 'rgba(255,165,0,0.9)'; // Orange for "failed/not found"
+        setTimeout(() => {
+            this.element.style.transition = 'opacity 2s ease';
+            this.element.style.transition = 'opacity 1.5s ease';
+            this.element.style.opacity = '0';
+            setTimeout(() => {
+                this.destroy();
+            }, 1500);
+        }, 3000);
+    }
+    
+    destroy() {
+        try {
+            // Remove DOM element
+            if (this.element && this.element.parentNode) {
+                this.element.remove();
+            }
+            
+            // Clear object references
+            this.element = null;
+            this.text = null;
+            this.state = null;
+            this.id = null;
+            
+            // Reposition remaining statuses
+            repositionTaskStatuses();
+        } catch (e) {
+            console.log('taskStatus destroy failed', e);
+        }
+    }
+}
+
 //[0]:drag fields, [1]: drop fields, [2]: drag field IDs (textcontent or image src), [3]: drop field IDs (.id attribute)
 async function getTaskDragDropFields() {
     const dragfields = document.querySelectorAll('div.cdk-drag.cella-dd.ng-star-inserted');
@@ -300,14 +448,89 @@ function selectDropdownOption(div, option) {
     mousedowndiv(div);
     
     const options = document.querySelectorAll('div.ng-option');
-    //console.log('Options:', options);
     for (let i = 0; i < options.length; i++) {
-        if (options[i].textContent == option) {
+        if (options[i].textContent.trim() == option) {
             clickdiv(options[i]);
             return;
         }
     }
-    console.log("didnt find option:", option);
+    console.log(`didnt find option: '${option}'`);
+    try {
+        const previousBg = div.style.background;
+        div.style.background = 'rgba(170,34,34,0.18)';
+        div.style.transition = 'background 0.2s ease';
+
+        // find nearest scrollable ancestor
+        const findScrollableAncestor = (el) => {
+            let cur = el.parentElement;
+            while (cur && cur !== document.body && cur !== document.documentElement) {
+                const style = getComputedStyle(cur);
+                const overflow = style.overflow + style.overflowY + style.overflowX;
+                if (/(auto|scroll)/.test(overflow)) return cur;
+                cur = cur.parentElement;
+            }
+            return document.body;
+        };
+
+        const container = findScrollableAncestor(div) || document.body;
+        const prevContainerPosition = getComputedStyle(container).position;
+        if (container !== document.body && prevContainerPosition === 'static') {
+            container.style.position = 'relative';
+        }
+
+        const badge = document.createElement('div');
+        const badgeId = '__tk_missing_option_' + Date.now();
+        badge.id = badgeId;
+        badge.textContent = `Missing: ${option}`;
+        Object.assign(badge.style, {
+            position: (container === document.body ? 'fixed' : 'absolute'),
+            background: 'rgba(170,34,34,0.95)',
+            color: 'white',
+            padding: '6px 8px',
+            borderRadius: '4px',
+            fontSize: '12px',
+            zIndex: '2147483647',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.4)',
+            pointerEvents: 'none',
+            maxWidth: '240px',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap'
+        });
+
+        // position relative to container
+        const rect = div.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+        if (container === document.body) {
+            badge.style.left = (rect.right + 8) + 'px';
+            badge.style.top = (rect.top) + 'px';
+            document.body.appendChild(badge);
+        } else {
+            // absolute inside container
+            const left = Math.max(0, rect.right - containerRect.left + (container.scrollLeft || 0) + 8);
+            const top = Math.max(0, rect.top - containerRect.top + (container.scrollTop || 0));
+            badge.style.left = left + 'px';
+            badge.style.top = top + 'px';
+            container.appendChild(badge);
+        }
+
+        const cleanup = () => {
+            try { const b = document.getElementById(badgeId); if (b) b.remove(); } catch (e) {}
+            try { div.style.background = previousBg; } catch (e) {}
+            try { if (container !== document.body && prevContainerPosition === 'static') container.style.position = prevContainerPosition; } catch (e) {}
+        };
+
+        // Fade out over 10s then clean up
+        try {
+            badge.style.opacity = '1';
+            badge.style.transition = 'opacity 10s linear';
+            // trigger transition
+            requestAnimationFrame(() => { badge.style.opacity = '0'; });
+        } catch (e) {}
+        const tidyTimer = setTimeout(() => { cleanup(); }, 10000);
+    } catch (e) {
+        console.log('Error showing missing option badge', e);
+    }
 }
 
 function placeDebugMarker(x, y, color = 'red') {
@@ -327,7 +550,6 @@ function placeDebugMarker(x, y, color = 'red') {
 
 async function selectDragDropAnswer(toDrag, toDrop)
 {
-
     const dragRect = toDrag.getBoundingClientRect();
     const dropRect = toDrop.getBoundingClientRect();
     
@@ -473,19 +695,19 @@ async function clearSelectedAnswers(taskType,divs) {
 function blockUserInteraction() {
     if (document.getElementById('__input-blocker')) return;
 
-    window.scrollTo(0, 0); // scroll to top
+    // scroll to top to help ensure elements stay in place while we interact
+    try { window.scrollTo(0, 0); } catch (e) {}
     const blocker = document.createElement('div');
     blocker.id = '__input-blocker';
     Object.assign(blocker.style, {
         position: 'fixed',
-        top: '0',
-        left: '0',
-        width: '10000px',
-        height: '10000px',
-        background: 'rgba(0, 0, 0, 0.25)', // semi-transparent background
-        zIndex: '99999',
+        inset: '0',
+        background: 'rgba(0, 0, 0, 0.18)', // semi-transparent background
+        zIndex: '2147483646',
         cursor: 'wait'
     });
+    // make sure clicks are blocked but don't capture pointer events for debugging overlays
+    blocker.style.pointerEvents = 'auto';
     document.body.appendChild(blocker);
 }
 
@@ -500,6 +722,19 @@ function zoomOut() {
     document.body.style.zoom = '25%';
     let tkelo = document.querySelector("tk-elonezet");
     if (tkelo) tkelo.style.height = "3000px"; // for some reason the page doesnt extend automatically, so this is a workaround
+    // scale status indicator to compensate for page zoom so it stays readable
+    try {
+        // compute inverse scale from zoom percent (e.g. '25%' -> 4)
+        const z = document.body.style.zoom;
+        if (z && z.endsWith('%')) {
+            const pct = parseFloat(z.slice(0, -1));
+            if (!isNaN(pct) && pct > 0) {
+                scaleTaskStatuses(1 / (pct / 100));
+            }
+        }
+    } catch (e) {
+        console.log('scaleTaskStatuses failed on zoomOut', e);
+    }
     return oldZoom;
 }
 
@@ -507,7 +742,12 @@ function zoomIn(oldZoom) {
     document.body.style.zoom = oldZoom;
     let tkelo = document.querySelector("tk-elonezet");
     if (tkelo) tkelo.style.height = "100%"; // reset height to default
+    // reset status indicator scale
+    try { scaleTaskStatuses(1); } catch (e) { console.log('scaleTaskStatuses failed on zoomIn', e); }
 }
+
+// Keep the status indicator visually stable when the page zooms by applying
+// an inverse CSS scale to the indicator element. scale = 1 means normal size.
 
 async function writeAnswers(taskType, answers, divs) {
     await clearSelectedAnswers(taskType, divs);
@@ -562,10 +802,14 @@ async function writeAnswers(taskType, answers, divs) {
             let fails = 0;
             let oldZoom = zoomOut(); // zoom out to make sure everything is on-screen
             for (let i = 0; i < divs[1].length; i++) {
-                if (answers[i] != false) {
+                if (answers[i]) {
                     // Find the index of answers[i] in divs[2] (drag IDs)
                     let dragDiv = divs[0][divs[2].indexOf(answers[i])];
                     let dropDiv = divs[1][i];
+                    if (!dragDiv) {
+                        console.log('Drag element not found:', answers[i]);
+                        continue;
+                    }
                     unblockUserInteraction();
                     await selectDragDropAnswer(dragDiv, dropDiv);
                     blockUserInteraction();
@@ -680,6 +924,18 @@ function checkArrayForTrue(array) {
 }
 
 function hasAnswers(current_task) {
+    //this happens whem dd_grid has answers -> all dropdivs with answers lose 'ddnyelocanreceive' class -> they arent detected
+    if (current_task.type == 'drag_drop_grid') {
+        if (current_task.answerInputs[1].length == 0) {
+            return true;
+        }
+        for(let i=0; i<current_task.answerInputs[0].length; i++) {
+            if (current_task.answerInputs[0][i].parentElement === null || current_task.answerInputs[0][i].parentElement.id.includes('dnd_nyelo_')) {
+                return true;
+            }
+        }
+        return false;
+    }
     return checkArrayForTrue(current_task.selectedAnswers);
 }
 
@@ -754,30 +1010,34 @@ async function syncTaskWithDB(current_task) {   //current_task is a copy here, i
 }
 
 function loadSettings() {
-    chrome.storage.sync.get({
-        name: '',
-        minvotes: 5,
-        votepercentage: 0.8,
-        contributer: true,
-        url: 'http://strong-finals.gl.at.ply.gg:36859/',
-        autoComplete: true
-    }, function(items) {
-        settings.name = items.name;
-        if(items.minvotes == 0) {
-            settings.minvotes = 5;
-        }
-        else settings.minvotes = items.minvotes;
+    return new Promise((resolve) => {
+        chrome.storage.sync.get({
+            name: '',
+            minvotes: 5,
+            votepercentage: 0.8,
+            contributer: true,
+            url: 'http://strong-finals.gl.at.ply.gg:36859/',
+            autoComplete: true
+        }, function(items) {
+            settings.name = items.name;
+            if(items.minvotes == 0) {
+                settings.minvotes = 5;
+            }
+            else settings.minvotes = items.minvotes;
 
-        if(items.votepercentage == 0.0) {
-            settings.votepercentage = 80.0;
-        }
-        else settings.votepercentage = items.votepercentage * 100.0;
-        settings.isContributor = items.contributer;
-        if(items.url == '') {
-            settings.url = 'http://strong-finals.gl.at.ply.gg:36859/';
-        }
-        else settings.url = items.url;
-        settings.autoComplete = items.autoComplete;
+            if(items.votepercentage == 0.0) {
+                settings.votepercentage = 80.0;
+            }
+            else settings.votepercentage = items.votepercentage * 100.0;
+            settings.isContributor = items.contributer;
+            if(items.url == '') {
+                settings.url = 'http://strong-finals.gl.at.ply.gg:36859/';
+            }
+            else settings.url = items.url;
+            settings.autoComplete = items.autoComplete;
+
+            resolve(items);
+        });
     });
 }
 
@@ -824,37 +1084,65 @@ let wsOnMessage = null;
 let reqList = new Map();
 let reqListIndex = 1;
 
+// Tracks whether the background reported the WebSocket as connected
+let wsConnected = 0;
+
 function connectToBackground() {
-    wsOnMessage = (response) => {
-        console.log('Response from background:', response);
-    }
-    port = chrome.runtime.connect();
+    return new Promise((resolve, reject) => {
+        if (wsConnected) {
+            console.log('WebSocket is already connected: ', wsConnected);
+            resolve();
+        }
+        wsOnMessage = (response) => {
+            console.log('Response from background:', response);
+        }
+        port = chrome.runtime.connect();
+        let settled = false;
+        const TIMEOUT_MS = 5000;
 
-    port.onMessage.addListener(response => {
-        if(!response || response.id === undefined) {
-            if(response.type === 'wsConnected') {
-                console.log('WebSocket connected to background script.');
+        const onMessage = (response) => {
+            if(!response || response.id === undefined) {
+                if(response && response.type === 'wsConnected') {
+                    console.log('WebSocket connected to background script.');
+                    wsConnected++;
+                    if (!settled) { settled = true; clearTimeout(timer); resolve(); }
+                    return;
+                }
+                if(response && (response.type === 'wsError' || response.type === 'wsClosed')) {
+                    console.log('WebSocket error/closed:', response.error || response.type);
+                    wsConnected = Math.max(wsConnected - 1, 0);
+                    if (!settled) { settled = true; clearTimeout(timer); reject(new Error(response.type || 'wsError')); }
+                    return;
+                }
+                console.log('Invalid response received:', response, response && response.id);
                 return;
             }
-            if (response.type === 'wsError' || response.type === 'wsClosed') {
-                console.log('WebSocket error/closed:', response.error || response.type);
+            if (typeof reqList.get(response.id) !== 'function') {
+                console.log('No request function found for response ID:', response.id);
                 return;
             }
-            console.log('Invalid response received:', response, response.id);
-            return;
-        }
-        if (typeof reqList.get(response.id) !== 'function') {
-            console.log('No request function found for response ID:', response.id);
-            return;
-        }
-        reqList.get(response.id)(response);
-        reqList.delete(response.id);
-    });
+            reqList.get(response.id)(response);
+            reqList.delete(response.id);
+        };
 
-    port.onDisconnect.addListener(() => {
-        console.log('Port disconnected, reconnecting...');
-        port = null;
-        connectToBackground();
+        port.onMessage.addListener(onMessage);
+
+        port.onDisconnect.addListener(() => {
+            console.log('Port disconnected, reconnecting...');
+            port = null;
+            wsConnected = Math.max(wsConnected - 1, 0);
+            // try to reconnect in background; swallow any rejection from the retry
+            if (wsConnected < 1) connectToBackground().catch(err => console.log('reconnect failed', err));
+        });
+
+        // Timeout: reject if wsConnected not received in time
+        const timer = setTimeout(() => {
+            if (!settled) {
+                settled = true;
+                console.log('connectToBackground: timed out waiting for wsConnected');
+                reject(new Error('timeout waiting for wsConnected'));
+            }
+        }, TIMEOUT_MS);
     });
 }
 
@@ -892,11 +1180,40 @@ async function updateUserAnswers(current_task, event) {
 
 var settings = {};
 async function main_loop() {
-    loadSettings();
-    await new Promise(resolve => setTimeout(resolve, 100)); // Wait for settings to load
-    
-    connectToBackground();
-    await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for bg connection
+
+    let settings_task = new taskStatus('beállítások betöltése');
+    try {
+        await loadSettings();
+        settings_task.succeed();
+    } catch (error) {
+        settings_task.error("hiba a beállítások betöltésekor: " + error);
+    }
+
+    // Connect to background and retry on failure with exponential backoff
+    let backoff = 500; // ms
+    const maxBackoff = 8000; // ms
+    let retryCnt = 0;
+    const maxRetries = 5;
+    let connect_status = new taskStatus('kapcsolódás a szerverhez...', 'processing');
+    while (true) {
+        try {
+            await connectToBackground();
+            connect_status.succeed();
+            break; // connected
+        } catch (err) {
+            console.log('connectToBackground failed:', err);
+            retryCnt++;
+            if (retryCnt >= maxRetries) {
+                connect_status.error('Max újrakapcsolódási kísérlet elérve, frissítse az oldalt az újrapróbálkozáshoz');
+                console.log('Max retries reached, giving up.');
+                return;
+            }
+            connect_status.set_text('kapcsolódás a szerverhez... (újrapróbálkozás ' + retryCnt + '/' + maxRetries + ')');
+            await new Promise(resolve => setTimeout(resolve, backoff));
+            backoff = Math.min(maxBackoff, Math.floor(backoff * 1.8));
+            
+        }
+    }
     //fetchAnnouncements();
 
     let last_url = '';
@@ -962,14 +1279,6 @@ async function main_loop() {
         }
     });
 
-    // mouse move event listener to announce where mouse moves
-    /*document.addEventListener('mousemove', async function(event) {
-        console.log('client:', event.clientX, event.clientY);
-        console.log('page:', event.clientX, event.clientY);
-        console.log('screen:', event.screenX, event.screenY);
-        console.log('scroll:', window.scrollX, window.scrollY);
-    });/* */
-
     while (true) {
         url = window.location.href;
         //idle loop, no new url found
@@ -981,35 +1290,50 @@ async function main_loop() {
         //when a new url is found
         //wait for the page to show a task
         console.log('New URL, waiting for task...');
+        let getTaskStatus = new taskStatus('feladatra várakozás...', 'processing');
         while (getTaskType() == 'unknown') {
             await new Promise(resolve => setTimeout(resolve, 500));
         }
         console.log('task got: ', getTaskType());
-        
+        getTaskStatus.succeed("feladat észlelve");
+
         last_url = url;
 
         if (sendResults && current_task != null && hasAnswers(current_task)) {
-                console.log('New task found, syncing old one with DB...');
-                syncTaskWithDB(JSON.parse(JSON.stringify(current_task)));
+            console.log('New task found, syncing old one with DB...');
+            const syncPromise = syncTaskWithDB(JSON.parse(JSON.stringify(current_task)));
+            let syncStatus = new taskStatus('előző feladat szinkronizálása...', 'processing');
+            syncPromise.then(() => {
+                syncStatus.succeed("előző feladat szinkronizálása kész");
+            }).catch((error) => {
+                syncStatus.error("hiba az előző feladat szinkronizálása során: " + error);
+            });
         }
         sendResults = true;
         current_task = await getTask();
 
+        let taskFillStatus = new taskStatus('feladat kitöltése...', 'processing');
+
         if (hasAnswers(current_task)) {
             console.log('Already has answers, skipping autofill...');
+            taskFillStatus.succeed("már van valami beírva; kihagyva");
             sendResults = false;
         }
         else if (current_task.type !== 'unknown') {
             try {
-                let queryResult = await syncTaskWithDB(current_task);
+                taskFillStatus.set_text('válasz kérése szervertől...');
+                const queryPromise = syncTaskWithDB(current_task);
+                let queryResult = await queryPromise;
                 if (queryResult != null) {
                     console.log('Query result:', queryResult);
-                    loadSettings();
+                    await loadSettings();
                     if (queryResult.totalVotes >= settings.minvotes && 100*queryResult.votes / queryResult.totalVotes >= settings.votepercentage) {
                         sendResults = false;
                         console.log('Enough votes and enough percentage of votes.');
+                        taskFillStatus.set_text('válasz beírása...');
                         await writeAnswers(current_task.type, JSON.parse(queryResult.answer), current_task.answerInputs);
-                        await new Promise(resolve => setTimeout(resolve, 300));
+                        //await new Promise(resolve => setTimeout(resolve, 300));
+                        taskFillStatus.succeed("válasz beírása kész");
                         //scroll to bottom of the page
                         
                         const buttons = document.querySelectorAll('button.btn.btn-secondary.d-block');
@@ -1021,16 +1345,20 @@ async function main_loop() {
                         }
                     }
                     else {
+                        taskFillStatus.fail(`nem elég a leadott válasz (${queryResult.votes}/${queryResult.totalVotes} ugyanolyan : ${100*queryResult.votes / queryResult.totalVotes}%), 
+                            kéne: ${settings.minvotes} össz válasz és ${settings.votepercentage}%`, 'skipped');
                         console.log('Not enough votes or not enough percentage of votes.');
                         console.log('Total votes:', queryResult.totalVotes, "required votes:", settings.minvotes);
                         console.log('Vote%:', 100*queryResult.votes / queryResult.totalVotes , "required vote%:", settings.votepercentage);
                     }
                 }
                 else {
+                    taskFillStatus.fail('nincs még erre a feladatra leadott válasz', 'skipped');
                     console.log('No solution found in the database.');
                 }
             }
             catch (error) {
+                taskFillStatus.error("hiba a feladat lekérése során: " + error);
                 console.log('Error fetching task from DB:', error);
             }
         }
