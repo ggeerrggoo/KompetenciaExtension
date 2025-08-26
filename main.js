@@ -1204,7 +1204,7 @@ async function main_loop() {
             if (retryCnt >= maxRetries) {
                 connect_status.error('Max újrakapcsolódási kísérlet elérve, frissítse az oldalt az újrapróbálkozáshoz');
                 console.log('Max retries reached, giving up.');
-                return;
+                return 504;
             }
             connect_status.set_text('kapcsolódás a szerverhez... (újrapróbálkozás ' + retryCnt + '/' + maxRetries + ')');
             await new Promise(resolve => setTimeout(resolve, backoff));
@@ -1366,19 +1366,26 @@ async function main_loop() {
 }
 
 async function main_loop_wrapper() {
-maxGlobalRetryCnt = 5;
-for(let i=0; i<maxGlobalRetryCnt;i++)
-{
-try {
-   await main_loop();
-} catch (error) {
-    let mainErrorTask = new taskStatus('hiba: ' + error, '\nújraindítás...');
-    mainErrorTask.error();
-    console.error('Error in main loop:', error);
-}
-}
-let finalErrorTask = new taskStatus('hiba: ' + error, '\nvége. maximum újraindítási kísérletek elérve');
-finalErrorTask.error();
-console.error('Error in main loop:', error);
+    maxGlobalRetryCnt = 5;
+    mainError = false;
+    for (let i = 0; i < maxGlobalRetryCnt; i++) {
+        try {
+            let returncode = await main_loop();
+            if (returncode === 504) {
+                console.log('timeout while connecting to server');
+                break;
+            }
+        } catch (error) {
+            let mainErrorTask = new taskStatus('hiba: ' + error, '\nújraindítás...');
+            mainErrorTask.error();
+            console.error('Error in main loop:', error);
+            mainError = error;
+        }
+    }
+    if (mainError) {
+        let finalErrorTask = new taskStatus('hiba: ' + mainError, '\nvége. maximum újraindítási kísérletek elérve');
+        finalErrorTask.error();
+        console.error('Error in main loop:', mainError);
+    }
 }
 main_loop_wrapper();
