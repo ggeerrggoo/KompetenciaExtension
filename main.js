@@ -202,9 +202,14 @@ function repositionTaskStatuses(scale = -1) {
         }
         const tasks = document.querySelectorAll('[id^="__tk_task_"]');
         tasks.forEach((task, index) => {
-            // Scale the spacing between task statuses based on the zoom scale
-            const scaledSpacing = 32 * scale;
-            task.style.bottom = (50 + index * scaledSpacing) + 'px';
+            if (index == 0) {
+                task.style.bottom = 50 * scale + 'px';
+            }
+            else {
+                const prevTop = tasks[index - 1].getBoundingClientRect().top;
+                // Position current element 10px above the previous element's top
+                task.style.bottom = (window.innerHeight - prevTop + 8) * scale + 'px';
+            }
         });
     } catch (e) {
         console.log('repositionTaskStatuses failed', e);
@@ -246,9 +251,16 @@ class taskStatus {
         this.id = `__tk_task_${++taskStatusIndex}`;
         this.element = this.createElement();
         document.body.appendChild(this.element);
-        let existingTasks = document.querySelectorAll('[id^="__tk_task_"]');
-        if(existingTasks.length)
-            this.element.style.bottom = (50 + (existingTasks.length - 1) * 32 * getCurrentScale()) + 'px';
+        repositionTaskStatuses();
+        if (this.state === 'error') {
+            this.error();
+        }
+        else if (this.state === 'failed') {
+            this.fail();
+        }
+        else if (this.state === 'done') {
+            this.succeed();
+        }
     }
 
     createElement() {
@@ -1015,26 +1027,20 @@ function loadSettings() {
             minvotes: 5,
             votepercentage: 0.8,
             contributer: true,
-            url: 'http://strong-finals.gl.at.ply.gg:36859/',
+            url: 'https://tekaku.hu/',
             autoComplete: true
         }, function(items) {
             settings.name = items.name;
-            if(items.minvotes == 0) {
-                settings.minvotes = 5;
-            }
-            else settings.minvotes = items.minvotes;
-
-            if(items.votepercentage == 0.0) {
-                settings.votepercentage = 80.0;
-            }
-            else settings.votepercentage = items.votepercentage * 100.0;
+            settings.minvotes = items.minvotes;
+            settings.votepercentage = items.votepercentage * 100.0;
             settings.isContributor = items.contributer;
-            if(items.url == '') {
-                settings.url = 'http://strong-finals.gl.at.ply.gg:36859/';
+            settings.url = items.url;
+            if (settings.url.includes("strong-finals.gl.at.ply.gg:36859")) { // update old playit URL
+                console.warn('old playit URL detected');
+                //show a red status as well as warning
+                let oldUrlIndicator = new taskStatus('Régi playit URL van beállítva, ha ez nem direkt van, frissítsd "https://tekaku.hu/"-ra a beállítások -> advanced menüben', 'error');
             }
-            else settings.url = items.url;
             settings.autoComplete = items.autoComplete;
-
             resolve(items);
         });
     });
@@ -1204,7 +1210,7 @@ async function main_loop() {
             if (retryCnt >= maxRetries) {
                 connect_status.error('Max újrakapcsolódási kísérlet elérve, frissítse az oldalt az újrapróbálkozáshoz');
                 console.log('Max retries reached, giving up.');
-                return;
+                return 504;
             }
             connect_status.set_text('kapcsolódás a szerverhez... (újrapróbálkozás ' + retryCnt + '/' + maxRetries + ')');
             await new Promise(resolve => setTimeout(resolve, backoff));
@@ -1366,19 +1372,26 @@ async function main_loop() {
 }
 
 async function main_loop_wrapper() {
-maxGlobalRetryCnt = 5;
-for(let i=0; i<maxGlobalRetryCnt;i++)
-{
-try {
-   await main_loop();
-} catch (error) {
-    let mainErrorTask = new taskStatus('hiba: ' + error, '\nújraindítás...');
-    mainErrorTask.error();
-    console.error('Error in main loop:', error);
-}
-}
-let finalErrorTask = new taskStatus('hiba: ' + error, '\nvége. maximum újraindítási kísérletek elérve');
-finalErrorTask.error();
-console.error('Error in main loop:', error);
+    maxGlobalRetryCnt = 5;
+    mainError = false;
+    for (let i = 0; i < maxGlobalRetryCnt; i++) {
+        try {
+            let returncode = await main_loop();
+            if (returncode === 504) {
+                console.log('timeout while connecting to server');
+                break;
+            }
+        } catch (error) {
+            let mainErrorTask = new taskStatus('hiba: ' + error, '\nújraindítás...');
+            mainErrorTask.error();
+            console.error('Error in main loop:', error);
+            mainError = error;
+        }
+    }
+    if (mainError) {
+        let finalErrorTask = new taskStatus('hiba: ' + mainError, '\nvége. maximum újraindítási kísérletek elérve');
+        finalErrorTask.error();
+        console.error('Error in main loop:', mainError);
+    }
 }
 main_loop_wrapper();

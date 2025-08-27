@@ -50,7 +50,7 @@ function restoreOptions() {
 
         document.getElementById('contributer').checked = items.contributer;
         if(items.url == '') {
-            document.getElementById('url').value = 'http://strong-finals.gl.at.ply.gg:36859/';
+            document.getElementById('url').value = 'https://tekaku.hu/';
         }
         else document.getElementById('url').value = items.url;
         document.getElementById('auto-complete').checked = items.autoComplete;
