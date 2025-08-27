@@ -39,7 +39,7 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
 
 function getWebSocketUrl() {
     return new Promise((resolve, reject) => {
-        chrome.storage.sync.get({url: "http://strong-finals.gl.at.ply.gg:36859/"}, function(items) {
+        chrome.storage.sync.get({url: "https://tekaku.hu/"}, function(items) {
             let url = items.url.replace(/^http/, 'ws');
             if (!url.endsWith('/')) {
                 url += '/';
