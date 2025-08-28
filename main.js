@@ -908,7 +908,6 @@ async function syncTaskWithDB(current_task) {   //current_task is a copy here, i
             name: current_task.name,
             question: current_task.question,
             description: current_task.description,
-            type: current_task.type,
             solution: current_task.selectedAnswers
         };
         const user = {
@@ -1155,7 +1154,7 @@ async function main_loop() {
             if (event.target.classList.contains('btn-danger')) { // lezárás gomb elv. ilyen
                 if (sendResults && current_task != null && hasAnswers(current_task)) {
                     console.log('lezárás clicked, syncing last task');
-                    let asdf = syncTaskWithDB(JSON.parse(JSON.stringify(current_task)));
+                    let asdf = syncTaskWithDB(current_task);
                     console.log('Sync promise:', asdf);
                     sendResults = false;
             }
@@ -1225,7 +1224,7 @@ async function main_loop() {
 
         if (sendResults && current_task != null && hasAnswers(current_task)) {
             console.log('New task found, syncing old one with DB...');
-            const syncPromise = syncTaskWithDB(JSON.parse(JSON.stringify(current_task)));
+            const syncPromise = syncTaskWithDB(current_task);
             let syncStatus = new taskStatus('előző feladat szinkronizálása...', 'processing');
             syncPromise.then(() => {
                 syncStatus.succeed("előző feladat szinkronizálása kész");
