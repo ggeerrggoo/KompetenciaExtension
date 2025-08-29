@@ -131,6 +131,10 @@ async function getTaskDDfieldID(div, dragordrop) {
         if (img) {
             // Wait until image is loaded
             await waitForImageLoad(img);
+            let waitCnt = 0;
+            while( (!img.naturalWidth || !img.naturalHeight) && waitCnt++ < 5) {
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
 
             if (img.naturalWidth && img.naturalHeight) {
                 const canvas = document.createElement('canvas');
@@ -290,43 +294,71 @@ class taskStatus {
         this.element.textContent = `${text}`;
     }
 
-    succeed(text = this.text) {
+
+    /**
+     * Show success status
+     * @param {string} [text] - Optional text to display
+     * @param {string} [color] - Optional background color (default: 'rgba(34, 170, 34, 0.9)')
+     * @param {number} [stayTime] - Time in ms before fading (default: 500)
+     * @param {number} [fadeTime] - Time in ms for fade out (default: 500)
+     */
+    succeed({text = this.text, color = 'rgba(34, 170, 34, 0.9)', stayTime = 500, fadeTime = 500} = {}) {
         this.state = 'done';
         this.element.textContent = `${text}`;
-        this.element.style.background = 'rgba(34, 170, 34, 0.9)';
-        setTimeout(() => {
-            this.element.style.opacity = '0';
+        this.element.style.background = color;
+        if (stayTime !== -1 && fadeTime !== -1) {
             setTimeout(() => {
-                this.destroy();
-            }, 500);
-        }, 500);
+                this.element.style.transition = `opacity ${fadeTime/1000}s ease`;
+                this.element.style.opacity = '0';
+                setTimeout(() => {
+                    this.destroy();
+                }, fadeTime);
+            }, stayTime);
+        }
     }
 
-    error(text = this.text) {
+    /**
+     * Show error status
+     * @param {string} [text] - Optional text to display
+     * @param {string} [color] - Optional background color (default: 'rgba(170,34,34,0.9)')
+     * @param {number} [stayTime] - Time in ms before fading (default: 4000)
+     * @param {number} [fadeTime] - Time in ms for fade out (default: 2000)
+     */
+    error({text = this.text, color = 'rgba(170,34,34,0.9)', stayTime = 4000, fadeTime = 2000} = {}) {
         this.state = 'error';
         this.element.textContent = `${text}`;
-        this.element.style.background = 'rgba(170,34,34,0.9)';
-        setTimeout(() => {
-            this.element.style.transition = 'opacity 2s ease';
-            this.element.style.opacity = '0';
+        this.element.style.background = color;
+        if (stayTime !== -1 && fadeTime !== -1) {
             setTimeout(() => {
-                this.destroy();
-            }, 2000);
-        }, 4000);
+                this.element.style.transition = `opacity ${fadeTime/1000}s ease`;
+                this.element.style.opacity = '0';
+                setTimeout(() => {
+                    this.destroy();
+                }, fadeTime);
+            }, stayTime);
+        }
     }
 
-    fail(text = this.text) {
+    /**
+     * Show fail status
+     * @param {string} [text] - Optional text to display
+     * @param {string} [color] - Optional background color (default: 'rgba(255,165,0,0.9)')
+     * @param {number} [stayTime] - Time in ms before fading (default: 3000)
+     * @param {number} [fadeTime] - Time in ms for fade out (default: 1500)
+     */
+    fail({text = this.text, color = 'rgba(255,165,0,0.9)', stayTime = 3000, fadeTime = 1500} = {}) {
         this.state = 'failed';
         this.element.textContent = `${text}`;
-        this.element.style.background = 'rgba(255,165,0,0.9)'; // Orange for "failed/not found"
-        setTimeout(() => {
-            this.element.style.transition = 'opacity 2s ease';
-            this.element.style.transition = 'opacity 1.5s ease';
-            this.element.style.opacity = '0';
+        this.element.style.background = color;
+        if (stayTime !== -1 && fadeTime !== -1) {
             setTimeout(() => {
-                this.destroy();
-            }, 1500);
-        }, 3000);
+                this.element.style.transition = `opacity ${fadeTime/1000}s ease`;
+                this.element.style.opacity = '0';
+                setTimeout(() => {
+                    this.destroy();
+                }, fadeTime);
+            }, stayTime);
+        }
     }
     
     destroy() {
@@ -769,8 +801,8 @@ async function writeAnswers(task, answerInputs, answersToWrite) {
                 await new Promise(resolve => setTimeout(resolve, 100)); // extra buffer wait
                 //check if drag was successful
                 if (!dropDiv.querySelector('div.cdk-drag.cella-dd') && !dropDiv.querySelector('div.cdk-drag.szoveg-dd-tartalom')) {
-                    console.log('Drag and drop failed for:', currentToWrite, "cnt:", fails);
                     fails++;
+                    console.log('Drag and drop failed for:', currentToWrite, "cnt:", fails);
                 }
                 else {
                     succeeded = true;
@@ -872,7 +904,6 @@ async function syncTaskWithDB(current_task) {   //current_task is a copy here, i
     const dburl = settings.url+"solution/"; // http://strong-finals.gl.at.ply.gg:36859/solution
 
     if(!hasAnswers(current_task)) {
-        console.log('No answers found for current task');
         let task = {
             name: current_task.name,
             question: current_task.question,
@@ -1241,7 +1272,7 @@ async function main_loop() {
 
         if (hasAnswers(current_task)) {
             console.log('Already has answers, skipping autofill...');
-            taskFillStatus.succeed("már van valami beírva; kihagyva");
+            taskFillStatus.fail({text: "már van valami beírva; kihagyva", color:'rgba(156, 39, 176, 0.85)'});
             sendResults = false;
         }
         else if (current_task.type !== 'unknown') {
@@ -1302,14 +1333,14 @@ async function main_loop_wrapper() {
             }
         } catch (error) {
             let mainErrorTask = new taskStatus('hiba: ' + error, '\nújraindítás...');
-            mainErrorTask.error();
+            mainErrorTask.error({ stayTime: -1 });
             console.error('Error in main loop:', error);
             mainError = error;
         }
     }
     if (mainError) {
         let finalErrorTask = new taskStatus('hiba: ' + mainError, '\nvége. maximum újraindítási kísérletek elérve');
-        finalErrorTask.error();
+        finalErrorTask.error({ stayTime: -1 });
         console.error('Error in main loop:', mainError);
     }
 }
