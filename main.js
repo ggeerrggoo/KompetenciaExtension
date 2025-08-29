@@ -170,7 +170,7 @@ async function getTaskDDfieldID(div, dragordrop) {
     return ID;
     }
     catch (error) {
-        console.error(`Error getting task DD field ID: field: ${div}, dragordrop: ${dragordrop}, error: ${error}`);
+        console.error({text: `Error getting task DD field ID: field: ${div}, dragordrop: ${dragordrop}, error: ${error}`});
         return '';
     }
 }
@@ -1140,7 +1140,7 @@ async function main_loop() {
         await loadSettings();
         settings_task.succeed();
     } catch (error) {
-        settings_task.error("hiba a beállítások betöltésekor: " + error);
+        settings_task.error({"text": "hiba a beállítások betöltésekor: " + error});
     }
 
     // Connect to background and retry on failure with exponential backoff
@@ -1158,7 +1158,7 @@ async function main_loop() {
             console.log('connectToBackground failed:', err);
             retryCnt++;
             if (retryCnt >= maxRetries) {
-                connect_status.error('Max újrakapcsolódási kísérlet elérve, frissítse az oldalt az újrapróbálkozáshoz');
+                connect_status.error({"text": 'Max újrakapcsolódási kísérlet elérve, frissítse az oldalt az újrapróbálkozáshoz'});
                 console.log('Max retries reached, giving up.');
                 return 504;
             }
@@ -1173,6 +1173,7 @@ async function main_loop() {
     let last_url = '';
     let url = '';
     let current_task = null;
+    let taskFilledAnswers = [];
     let selectedAnswers = [];
     let sendResults = true;
 
@@ -1183,16 +1184,22 @@ async function main_loop() {
         try {
             updateUserAnswers(current_task, event);
             if (event.target.classList.contains('btn-danger')) { // lezárás gomb elv. ilyen
-                if (sendResults && current_task != null && hasAnswers(current_task)) {
+                if (settings.isContributor && current_task != null && hasAnswers(current_task) && taskFilledAnswers.toString() !== current_task.answerInputs.map(input => input.value).toString()) {
                     console.log('lezárás clicked, syncing last task');
-                    let asdf = syncTaskWithDB(current_task);
-                    console.log('Sync promise:', asdf);
+                    let syncPromise = syncTaskWithDB(current_task);
+                    let finalSyncStatus = new taskStatus('utolsó feladat szinkronizálása...', 'processing');
+                    console.log('Sync promise:', syncPromise);
+                    syncPromise.then(() => {
+                        finalSyncStatus.succeed({"text": "utolsó feladat szinkronizálása kész"});
+                    }).catch((error) => {
+                        finalSyncStatus.error({"text": "hiba az utolsó feladat szinkronizálása során: " + error});
+                    });
                     sendResults = false;
             }
         }
         }
         catch (error) {
-            console.error('Error updating user answers:', error);
+            console.error({'text': 'Error updating user answers:', error});
         }
     })
 
@@ -1248,23 +1255,26 @@ async function main_loop() {
         while (!isThereTask() || getTaskName() == '' || getTaskUniqueID() == 'No ID found.') {
             await new Promise(resolve => setTimeout(resolve, 500));
         }
-        console.log('task got');
-        getTaskStatus.succeed("feladat észlelve");
+        console.log('task seen');
+        getTaskStatus.set_text("feladat észlelve");
 
         last_url = url;
 
-        if (sendResults && current_task != null && hasAnswers(current_task) && settings.isContributor) {
-            console.log('New task found, syncing old one with DB...');
+        if (settings.isContributor && current_task != null && hasAnswers(current_task) && taskFilledAnswers.toString() !== current_task.answerInputs.map(input => input.value).toString()) {
+            console.log('New task, syncing old one with DB...');
+            console.log(`filled answers at begin: '${taskFilledAnswers}'`);
+            console.log(`current task answers: '${current_task.answerInputs.map(input => input.value)}'`);
             const syncPromise = syncTaskWithDB(current_task);
-            let syncStatus = new taskStatus('előző feladat szinkronizálása...', 'processing');
+            let syncstatus = new taskStatus('előző feladat szinkronizálása...', 'processing');
             syncPromise.then(() => {
-                syncStatus.succeed("előző feladat szinkronizálása kész");
+                syncstatus.succeed({"text": "előző feladat szinkronizálása kész"});
             }).catch((error) => {
-                syncStatus.error("hiba az előző feladat szinkronizálása során: " + error);
+                syncstatus.error({"text": "hiba az előző feladat szinkronizálása során: " + error});
             });
         }
         sendResults = true;
         current_task = await getTask();
+        getTaskStatus.succeed({"text": "feladat feldolgozva"});
         url = window.location.href;
         last_url = url;
 
@@ -1289,7 +1299,7 @@ async function main_loop() {
                         taskFillStatus.set_text('válasz beírása...');
                         await writeAnswers(current_task, current_task.answerInputs, JSON.parse(queryResult.answer));
                         //await new Promise(resolve => setTimeout(resolve, 300));
-                        taskFillStatus.succeed("válasz beírása kész");
+                        taskFillStatus.succeed({"text": "válasz beírása kész"});
                         //scroll to bottom of the page
                         
                         const buttons = document.querySelectorAll('button.btn.btn-secondary.d-block');
@@ -1301,23 +1311,25 @@ async function main_loop() {
                         }
                     }
                     else {
-                        taskFillStatus.fail(`nem elég a leadott válasz (${queryResult.votes}/${queryResult.totalVotes} ugyanolyan : ${100*queryResult.votes / queryResult.totalVotes}%), 
-                            kéne: ${settings.minvotes} össz válasz és ${settings.votepercentage}%`, 'skipped');
+                        taskFillStatus.fail({text: `nem elég a leadott válasz (${queryResult.votes}/${queryResult.totalVotes} ugyanolyan : ${100*queryResult.votes / queryResult.totalVotes}%), 
+                            kéne: ${settings.minvotes} össz válasz és ${settings.votepercentage}%`, status: 'skipped'});
                         console.log('Not enough votes or not enough percentage of votes.');
                         console.log('Total votes:', queryResult.totalVotes, "required votes:", settings.minvotes);
                         console.log('Vote%:', 100*queryResult.votes / queryResult.totalVotes , "required vote%:", settings.votepercentage);
                     }
                 }
                 else {
-                    taskFillStatus.fail('nincs még erre a feladatra leadott válasz', 'skipped');
+                    taskFillStatus.fail({text: 'nincs még erre a feladatra leadott válasz',status: 'skipped'});
                     console.log('No solution found in the database.');
                 }
             }
             catch (error) {
-                taskFillStatus.error("hiba a feladat lekérése során: " + error);
+                taskFillStatus.error({"text": "hiba a feladat lekérése során: " + error});
                 console.log('Error fetching task from DB:', error);
             }
         }
+
+        taskFilledAnswers = await getSelectedAnswers(current_task.answerInputs); //the answers that were there when task loaded, or after autocomplete
     }
 }
 
