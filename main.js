@@ -1253,7 +1253,7 @@ async function main_loop() {
 
         last_url = url;
 
-        if (sendResults && current_task != null && hasAnswers(current_task)) {
+        if (sendResults && current_task != null && hasAnswers(current_task) && settings.isContributor) {
             console.log('New task found, syncing old one with DB...');
             const syncPromise = syncTaskWithDB(current_task);
             let syncStatus = new taskStatus('előző feladat szinkronizálása...', 'processing');
@@ -1275,7 +1275,7 @@ async function main_loop() {
             taskFillStatus.fail({text: "már van valami beírva; kihagyva", color:'rgba(156, 39, 176, 0.85)'});
             sendResults = false;
         }
-        else if (current_task.type !== 'unknown') {
+        else if (settings.autoComplete) {
             try {
                 taskFillStatus.set_text('válasz kérése szervertől...');
                 const queryPromise = syncTaskWithDB(current_task);
