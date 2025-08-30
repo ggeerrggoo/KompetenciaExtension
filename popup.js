@@ -17,6 +17,16 @@ function saveOptions() {
         alert("Minimum votes must be greater than 0");
         return;
     }
+    if (options.url.includes("http://")) { 
+        console.warn('http:// in URL detected, removing it');
+        //options.url = options.url.replace("http://", "https://");
+    }
+    if (options.url.includes("https://") == false) { 
+        console.warn('No http:// or https:// in URL detected, adding https://');
+        options.url = "https://" + options.url;
+    }
+    if(options.url.endsWith("/") == false) 
+        options.url = options.url + "/";
     
 
     chrome.storage.sync.set(options, function() {
@@ -26,6 +36,7 @@ function saveOptions() {
             status.textContent = '';
         }, 750);
     });
+    restoreOptions();
 }
 
 function restoreOptions() {
@@ -50,7 +61,7 @@ function restoreOptions() {
 
         document.getElementById('contributer').checked = items.contributer;
         if(items.url == '') {
-            document.getElementById('url').value = 'http://strong-finals.gl.at.ply.gg:36859/';
+            document.getElementById('url').value = 'https://tekaku.hu/';
         }
         else document.getElementById('url').value = items.url;
         document.getElementById('auto-complete').checked = items.autoComplete;
