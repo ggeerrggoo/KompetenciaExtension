@@ -1,36 +1,76 @@
-class DDfield {
-    constructor(div, id='') {
-        this.div = div;
-        this.id = id
+const taskFieldSelectors = {
+    fullTask: 'div.tk-bgcolor-white.tk-shadow-around.p-4, div.szeparalt-container',
+    loadingLogo: 'svg.ng-tns-c107-0',
+    selectText: {
+        detect: 'div.valasz-betujel',
+        answers: 'div.valaszlehetoseg.valaszlehetoseg-hover.ng-star-inserted'
+    },
+    selectImage: {
+        detect: 'img.kep-valaszlehetoseg',
+        answers: 'div.valaszlehetoseg.valaszlehetoseg-hover.ng-star-inserted',
+        images: 'img.kep-valaszlehetoseg'
+    },
+    dropdown: {
+        detect: 'ng-select',
+        answers: 'div.ng-select-container'
+    },
+    customNumber: {
+        detect: 'input.form-control, textarea.form-control',
+        answers: 'input.form-control, textarea.form-control'
+    },
+    categorySelect: {
+        detect: 'div.csoportos-valasz-betujel',
+        answers: 'div.csoportos-valasz-betujel'
+    },
+    dragDrop: {
+        detect: 'div.cdk-drag.cella-dd.ng-star-inserted, div.cdk-drag.szoveg-dd-tartalom',
+        drag: 'div.cdk-drag.cella-dd, div.cdk-drag.szoveg-dd-tartalom',
+        drop: 'div[id*="destination_"], div[id*="dnd_nyelo_"]'
     }
-}
+};
+
+/** 
+ * The maximum size (in pixels) to which images are resized before hashing.
+ * @type {number}
+ */
+const maxImageHashSize = 20;
+
+/**
+ * object that holds information about an answer field
+ * @property {string} type - The type of the answer field (e.g., 'select', 'dropdown', 'customNumber', 'dragDrop')
+ * @property {HTMLElement} element - The HTML element representing the answer field
+ * @property {string | boolean} value - The current value of the answer field, false if not answered, string for the answer, true for multi-choice selected
+ * @property {string} id - An optional identifier for the element in the field, used in dragDrop tasks
+ */
 class answerField {
-    constructor(type, element, value) {
+    constructor(type, element, value, id='') {
         this.type = type;
         this.element = element;
         this.value = value;
+        this.id = id; // only used in dragDrop
     }
 }
 
+/**
+ * object that holds information about a task
+ * @property {string} uniqueID - The unique identifier for the task
+ * @property {Array<answerField>} answerFields - The answer fields associated with the task
+ */
 class task {
-    constructor(name, question, description, answerInputs, selectedAnswers) {
-        this.name = name;
-        this.question = question;
-        this.description = description;
-        this.answerInputs = answerInputs;
-        this.selectedAnswers = selectedAnswers;
+    constructor(uniqueID, answerFields) {
+        this.uniqueID = uniqueID;
+        this.answerFields = answerFields;
     }
 }
 
 function isThereTask() {
     if (
-        document.querySelector("div.valasz-betujel") != null ||
-        document.querySelector("img.kep-valaszlehetoseg") != null ||
-        document.querySelector("ng-select") != null ||
-        document.querySelector("input.form-control") != null || document.querySelector("textarea.form-control") != null ||
-        document.querySelector("div.csoportos-valasz-betujel") != null ||
-        document.querySelector('div.cdk-drag.cella-dd.ng-star-inserted') ||
-        document.querySelector('div.cdk-drag.szoveg-dd-tartalom')
+        document.querySelector(taskFieldSelectors.selectText.detect) ||
+        document.querySelector(taskFieldSelectors.selectImage.detect) ||
+        document.querySelector(taskFieldSelectors.dropdown.detect) ||
+        document.querySelector(taskFieldSelectors.customNumber.detect) ||
+        document.querySelector(taskFieldSelectors.categorySelect.detect) ||
+        document.querySelector(taskFieldSelectors.dragDrop.detect)
     ) {
         return true;
     } else {
@@ -38,153 +78,57 @@ function isThereTask() {
     }
 }
 
-function getTaskName() {
-    const tasknames = document.querySelectorAll('h3.mb-3');
-    return tasknames[tasknames.length - 1] ? tasknames[tasknames.length - 1].textContent : '';
+async function hashSHA256(text) {
+  const data = new TextEncoder().encode(text);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return [...new Uint8Array(digest)]
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
-function getTaskUniqueID() {
-    const q1 = document.querySelectorAll('p#kerdes');
-    const q2 = document.querySelectorAll('tk-kerdes-elem');
-    const q3 = document.querySelectorAll('div.ql-editor.szoveg-elem');
-    let qs = [];
-    if (q1.length > 0) {
-        qs = q1;
-    }
-    else if (q2.length > 0) {
-        qs = q2;
-    }
-    else if (q3.length > 0) {
-        qs = q3;
-    }
-
-    if(qs.length > 0) {
-        let q = qs[0];
-        let text = q.textContent.trim();
-        let prev_text = q.textContent.trim();
-        let i = 0;
-        let taskName = getTaskName().replace(/[^a-zA-Z0-9.,!?]/g, '');
-        // go to parent element until it contanins the task name or we do it 15 times,
-        // hopefully it is enough to make it unique
-        while(text.length <= 1000 && !text.includes(taskName) && i < 15) {
-            i++;
-            q = q.parentElement;
-            prev_text = text;
-            text = q.textContent.replace(/[^a-zA-Z0-9.,!?]/g, '');
-        }
-        // if the text is very long (eg. benne van a teljes szövegértés szöveg), revert to previous
-        if(text.length > 1500 && prev_text.length > 100) return prev_text;
-        else return text;
-    }
-    return 'No ID found.';
-}
-
-function getTaskDescription() {
-    return "nem kell szerintem";
-    const desc1 = document.querySelector('div.my-3.container.ng-star-inserted');
-    const desc2 = document.querySelector('tk-szeparalt-layout');
-    if(desc1) {
-        return desc1.textContent;
-    }
-    else if(desc2) {
-        return desc2.textContent;
-    }
-    else {
-        console.log('No description found.');
+async function getTaskUniqueID() {
+    const fullTaskField = document.querySelector(taskFieldSelectors.fullTask);
+    if (!fullTaskField) {
         return null;
     }
+
+    const allText = fullTaskField.textContent.trim();
+
+    return hashSHA256(allText);
+
 }
 
-//works with select_text and select_image task types
-function getTaskTextAnswerFields() {
-    const answers = document.querySelectorAll('div.valaszlehetoseg.valaszlehetoseg-hover.ng-star-inserted');
-    return Array.from(answers);
-}
-
-function getTaskDropdownFields() {
-    const fields = document.querySelectorAll('div.ng-select-container');
-    return Array.from(fields);
-}
-
-function getTaskImageFromDiv(div) {
-    const img = div.querySelector('img.kep-valaszlehetoseg');
-    return img;
-}
-
-function getTaskCategorySelectFields() {
-    const fields = document.querySelectorAll('div.csoportos-valasz-betujel');
-    return Array.from(fields);
-}
-
-function getTaskCustomNumberFields() {
-    const fields = Array.from(document.querySelectorAll('input.form-control'));
-    fields.push(...Array.from(document.querySelectorAll('textarea.form-control')));
-    return fields;
+function getAnswerFields(selector, type, idGenerator = null) {
+    const fields = Array.from(document.querySelectorAll(selector));
+    return Promise.all(fields.map(async field => new answerField(type, field, false, idGenerator ? await idGenerator(field) : '')));
 }
 
 async function getTaskDDfieldID(div, dragordrop) {
-    let ID = '';
-    try {
+  try {
     if (dragordrop === 'drag') {
-        const img = div.querySelector('img');
-
-        if (img) {
-            // Wait until image is loaded
-            await waitForImageLoad(img);
-            let waitCnt = 0;
-            while( (!img.naturalWidth || !img.naturalHeight) && waitCnt++ < 5) {
-                await new Promise(resolve => setTimeout(resolve, 50));
-            }
-
-            if (img.naturalWidth && img.naturalHeight) {
-                const canvas = document.createElement('canvas');
-                const maxSize = 20;
-
-                canvas.width = maxSize;
-                canvas.height = maxSize;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, maxSize, maxSize);
-
-                try {
-                    const dataURL = canvas.toDataURL();
-                    ID = hashString(dataURL);
-                } catch (e) {
-                    // If somehow image-reading magic fails: log fail, fall back
-                    console.log('Canvas toDataURL failed:', e);
-                    ID = div.textContent.trim();
-                }
-            } else {
-                // Image failed to load
-                console.log('Image failed to load, using text fallback for drag element ID.');
-                ID = div.textContent.trim();
-            }
-        } else {
-            // No image, use text
-            ID = div.textContent.trim();
-        }
-
+      return await getDragFieldID(div);
     } else if (dragordrop === 'drop') {
-        ID = div.id;
+      return div.id || '';
+    } else {
+      console.error(`Invalid dragordrop parameter: ${dragordrop}, expected 'drag' or 'drop'.`);
+      return '';
     }
-
-    return ID;
-    }
-    catch (error) {
-        console.error({text: `Error getting task DD field ID: field: ${div}, dragordrop: ${dragordrop}, error: ${error}`});
-        return '';
-    }
+  } catch (error) {
+    console.error(`Error getting task DD field ID:`, error);
+    return '';
+  }
 }
 
-// Hash function (djb2)
-function hashString(str) {
-    let hash = 5381;
-    for (let i = 0; i < str.length; i++) {
-        hash = ((hash << 5) + hash) + str.charCodeAt(i);
-    }
-    return 'img-' + (hash >>> 0);
+async function getDragFieldID(div) {
+  const img = div.querySelector('img');
+  if (img) {
+    await waitForImageLoad(img);
+    const idFromImage = await hashImageToID(img);
+    if (idFromImage) return idFromImage;
+  }
+  return div.textContent.trim();
 }
 
-// Returns a promise that resolves when the image is loaded (or fails)
 function waitForImageLoad(img) {
     return new Promise(resolve => {
         if (img.complete) {
@@ -195,62 +139,33 @@ function waitForImageLoad(img) {
     });
 }
 
-let taskStatusIndex = 0;
+async function hashImageToID(img) {
+  if (!img.naturalWidth || !img.naturalHeight) return null;
 
-function repositionTaskStatuses(scale = -1) {
-    try {
-        if (scale === -1) {
-            scale = 1 / getCurrentScale();
-        }
-        const tasks = document.querySelectorAll('[id^="__tk_task_"]');
-        tasks.forEach((task, index) => {
-            if (index == 0) {
-                task.style.bottom = 50 * scale + 'px';
-            }
-            else {
-                const prevTop = tasks[index - 1].getBoundingClientRect().top;
-                // Position current element 10px above the previous element's top
-                task.style.bottom = (window.innerHeight - prevTop + 8) * scale + 'px';
-            }
-        });
-    } catch (e) {
-        console.log('repositionTaskStatuses failed', e);
-    }
-}
-function scaleTaskStatuses(scale) {
-    try {
-        const statuses = document.querySelectorAll('[id^="__tk_task_"]');
-        statuses.forEach((status) => {
-            status.style.transformOrigin = 'bottom right';
-            status.style.transform = `scale(${scale})`;
-        });
-        // Also reposition with scaled spacing
-        repositionTaskStatuses(scale);
-    } catch (e) {
-        console.log('scaleTaskStatuses error', e);
-    }
+  const canvas = document.createElement('canvas');
+  canvas.width = maxImageHashSize;
+  canvas.height = maxImageHashSize;
+
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, maxImageHashSize, maxImageHashSize);
+
+  try {
+    const dataURL = canvas.toDataURL();
+    return await hashSHA256(dataURL);
+  } catch (e) {
+    console.error('Canvas hashing failed:', e);
+    return null;
+  }
 }
 
-function getCurrentScale() {
-    try {
-        const z = document.body.style.zoom;
-        if (z && z.endsWith('%')) {
-            const pct = parseFloat(z.slice(0, -1));
-            if (!isNaN(pct) && pct > 0) {
-                return (pct / 100); // Return the inverse scale (e.g., 25% -> 4)
-            }
-        }
-        return 1; // Default scale if no zoom is applied
-    } catch (e) {
-        return 1;
-    }
-}
 
 class taskStatus {
+    static taskStatusIndex = 0;
+
     constructor(text, state = 'processing') {
         this.text = text + (text.endsWith(".") ? "" : "...");
         this.state = state;
-        this.id = `__tk_task_${++taskStatusIndex}`;
+        this.id = `__tk_task_${++taskStatus.taskStatusIndex}`;
         this.element = this.createElement();
         document.body.appendChild(this.element);
         repositionTaskStatuses();
@@ -272,7 +187,7 @@ class taskStatus {
         Object.assign(el.style, {
             position: 'fixed',
             right: '12px',
-            bottom: '50px', // above main status
+            bottom: '50px',
             padding: '6px 8px',
             background: 'rgba(70,130,180,0.9)', // Steel blue for "in progress"
             color: 'white',
@@ -382,208 +297,138 @@ class taskStatus {
     }
 }
 
-//[0]:drag fields, [1]: drop fields, [2]: drag field IDs (textcontent or image src), [3]: drop field IDs (.id attribute)
-async function getTaskDragDropFields() {
-    const dragfields = Array.from(document.querySelectorAll('div.cdk-drag.cella-dd, div.cdk-drag.szoveg-dd-tartalom'));
-    let dragIDs = [];
-    for (let i = 0; i < dragfields.length; i++) {
-        dragIDs.push(await getTaskDDfieldID(dragfields[i], 'drag'));
+function repositionTaskStatuses(scale = -1) {
+    try {
+        if (scale === -1) {
+            scale = 1 / getCurrentScale();
+        }
+        const tasks = document.querySelectorAll('[id^="__tk_task_"]');
+        tasks.forEach((task, index) => {
+            if (index == 0) {
+                task.style.bottom = 50 * scale + 'px';
+            }
+            else {
+                const prevTop = tasks[index - 1].getBoundingClientRect().top;
+                // Position current element 10px above the previous element's top
+                task.style.bottom = (window.innerHeight - prevTop + 8) * scale + 'px';
+            }
+        });
+    } catch (e) {
+        console.log('repositionTaskStatuses failed', e);
     }
-
-    const dropfields = Array.from(document.querySelectorAll('div[id*="destination_"], div[id*="dnd_nyelo_"]'));
-    let dropIDs = [];
-
-    for (let i = 0; i < dropfields.length; i++) {
-        dropIDs.push(await getTaskDDfieldID(dropfields[i], 'drop'));
+}
+function scaleTaskStatuses(scale) {
+    try {
+        const statuses = document.querySelectorAll('[id^="__tk_task_"]');
+        statuses.forEach((status) => {
+            status.style.transformOrigin = 'bottom right';
+            status.style.transform = `scale(${scale})`;
+        });
+        // Also reposition with scaled spacing
+        repositionTaskStatuses(scale);
+    } catch (e) {
+        console.log('scaleTaskStatuses error', e);
     }
-    return [dragfields, dropfields, dragIDs, dropIDs];
+}
+
+function getCurrentScale() {
+    try {
+        const currentZoom = document.body.style.zoom;
+        if (currentZoom && currentZoom.endsWith('%')) {
+            const percent = parseFloat(currentZoom.slice(0, -1));
+            if (!isNaN(percent) && percent > 0) {
+                return (percent / 100);
+            }
+        }
+        return 1; // Default scale if no zoom is applied
+    } catch (e) {
+        return 1;
+    }
 }
 
 function getUserID() {
     const url = window.location.href;
-    const match = url.match(/[?&]azon=([^&%]+)/);
+    const match = url.match(/[?&]azon=([^&%]+)/); // regex matches 'azon' parameter until a % character, expecting azon=A111-B222%2F...
     if (match && match[1]) {
-        return decodeURIComponent(match[1]);
+        return hashSHA256(decodeURIComponent(match[1]));
     }
     return "unknown";
 }
 
-function isMultiChoiceAnswerSelected(div) {
-    if (div.classList.contains('selected') || div.querySelector('div.selected') != null || div.querySelector('div.kep-valasz-check-selected') != null) {
+function isMultiChoiceAnswerSelected(MultiChoiceDiv) {
+    if (MultiChoiceDiv.classList.contains('selected') || //for selectText
+        MultiChoiceDiv.querySelector('div.selected') ||  //for categorySelect
+        MultiChoiceDiv.querySelector('div.kep-valasz-check-selected') //for selectImage
+    ) {
         return true;
     }
     return false;
 }
 
-function dropdownAnswerSelected(div) {
-    let answer = div.firstChild.textContent; // firstchild because of the stupid x at the end
-    if (answer == "") {
+function dropdownAnswerSelected(dropdownDiv) {
+    let dropdownText = dropdownDiv.firstChild.textContent; // .firstChild because of the stupid 'x' at the end sometimes
+    if (dropdownText == "") {
         return false;
     }
-    answer = answer.trim();
+    dropdownText = dropdownText.trim();
     // some tasks have placeholder text
-    if (div.querySelector('div.ng-placeholder')) {
-        const placeholder = div.querySelector('div.ng-placeholder').textContent.trim();
-        if (answer == placeholder) {
+    if (dropdownDiv.querySelector('div.ng-placeholder')) {
+        const placeholder = dropdownDiv.querySelector('div.ng-placeholder').textContent.trim();
+        if (dropdownText == placeholder) {
             return false;
         }
         else {
-            answer = answer.replace(placeholder, '').trim();
+            dropdownText = dropdownText.replace(placeholder, '').trim();
         }
     }
-    return answer;
+    return dropdownText;
 }
 
-function CustomNumberAnswerSelected(div) {
-    if (div.value != "") {
-        return div.value;
+function CustomNumberAnswerSelected(customNumberDiv) {
+    if (customNumberDiv.value != "") {
+        return customNumberDiv.value;
     }
     return false;
 }
 
-//clicks on a div element
-function clickdiv(div) {
-    if (div && typeof div.click === 'function') {
-        div.click();
-    } else {
-        console.log('The provided div', div, 'does not have a click event or is not valid.');
-    }
-}
-
-//does mousedown on a div element
-function mousedowndiv(div) {
-    const e = new MouseEvent('mousedown', {
-        bubbles: true,
-        cancelable: true
-    });
-    div.dispatchEvent(e);
-}
-
 //select option with specific textContent from a dropdown
 function selectDropdownOption(div, option) {
+
+    //deselecting is useless, nothing selected is never correct
     if (option == false) {
         return;
     }
+
     //open the dropdown
-    mousedowndiv(div);
+    div.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
     
     const options = document.querySelectorAll('div.ng-option');
     for (let i = 0; i < options.length; i++) {
         if (options[i].textContent.trim() == option) {
-            clickdiv(options[i]);
+            options[i].click();
             return;
         }
     }
     console.log(`didnt find option: '${option}'`);
-    try {
-        const previousBg = div.style.background;
-        div.style.background = 'rgba(170,34,34,0.18)';
-        div.style.transition = 'background 0.2s ease';
-
-        // find nearest scrollable ancestor
-        const findScrollableAncestor = (el) => {
-            let cur = el.parentElement;
-            while (cur && cur !== document.body && cur !== document.documentElement) {
-                const style = getComputedStyle(cur);
-                const overflow = style.overflow + style.overflowY + style.overflowX;
-                if (/(auto|scroll)/.test(overflow)) return cur;
-                cur = cur.parentElement;
-            }
-            return document.body;
-        };
-
-        const container = findScrollableAncestor(div) || document.body;
-        const prevContainerPosition = getComputedStyle(container).position;
-        if (container !== document.body && prevContainerPosition === 'static') {
-            container.style.position = 'relative';
-        }
-
-        const badge = document.createElement('div');
-        const badgeId = '__tk_missing_option_' + Date.now();
-        badge.id = badgeId;
-        badge.textContent = `Missing: ${option}`;
-        Object.assign(badge.style, {
-            position: (container === document.body ? 'fixed' : 'absolute'),
-            background: 'rgba(170,34,34,0.95)',
-            color: 'white',
-            padding: '6px 8px',
-            borderRadius: '4px',
-            fontSize: '12px',
-            zIndex: '2147483647',
-            boxShadow: '0 2px 6px rgba(0,0,0,0.4)',
-            pointerEvents: 'none',
-            maxWidth: '240px',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap'
-        });
-
-        // position relative to container
-        const rect = div.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
-        if (container === document.body) {
-            badge.style.left = (rect.right + 8) + 'px';
-            badge.style.top = (rect.top) + 'px';
-            document.body.appendChild(badge);
-        } else {
-            // absolute inside container
-            const left = Math.max(0, rect.right - containerRect.left + (container.scrollLeft || 0) + 8);
-            const top = Math.max(0, rect.top - containerRect.top + (container.scrollTop || 0));
-            badge.style.left = left + 'px';
-            badge.style.top = top + 'px';
-            container.appendChild(badge);
-        }
-
-        const cleanup = () => {
-            try { const b = document.getElementById(badgeId); if (b) b.remove(); } catch (e) {}
-            try { div.style.background = previousBg; } catch (e) {}
-            try { if (container !== document.body && prevContainerPosition === 'static') container.style.position = prevContainerPosition; } catch (e) {}
-        };
-
-        // Fade out over 10s then clean up
-        try {
-            badge.style.opacity = '1';
-            badge.style.transition = 'opacity 10s linear';
-            // trigger transition
-            requestAnimationFrame(() => { badge.style.opacity = '0'; });
-        } catch (e) {}
-        const tidyTimer = setTimeout(() => { cleanup(); }, 10000);
-    } catch (e) {
-        console.log('Error showing missing option badge', e);
-    }
+    new taskStatus(`didnt find dropdown option: '${option}'`, 'error');
 }
 
-function placeDebugMarker(x, y, color = 'red') {
-    const marker = document.createElement('div');
-    marker.style.position = 'fixed';
-    marker.style.left = `${x - 5}px`;
-    marker.style.top = `${y - 5}px`;
-    marker.style.width = '10px';
-    marker.style.height = '10px';
-    marker.style.backgroundColor = color;
-    marker.style.zIndex = '9999';
-    marker.style.pointerEvents = 'none';
-    marker.style.border = '1px solid black';
-    document.body.appendChild(marker);
-    marker.classList.add('debug-marker');
-}
+async function selectDragDropAnswer(dragDiv, dropDiv) {
+    const dragRect = dragDiv.getBoundingClientRect();
+    const dropRect = dropDiv.getBoundingClientRect();
 
-async function selectDragDropAnswer(toDrag, toDrop)
-{
-    const dragRect = toDrag.getBoundingClientRect();
-    const dropRect = toDrop.getBoundingClientRect();
-    
     const startX = dragRect.left + dragRect.width / 2;
     const startY = dragRect.top + dragRect.height / 2;
     
     const endX = dropRect.left + dropRect.width / 2;
     const endY = dropRect.top + dropRect.height / 2;
         
-    toDrag.dispatchEvent(new MouseEvent('mousedown', {
+    dragDiv.dispatchEvent(new MouseEvent('mousedown', {
         bubbles: true,
         clientX: startX,
         clientY: startY
     }));
+    // needed to initiate dragging motion
     document.dispatchEvent(new MouseEvent('mousemove', {    
         bubbles: true,
         clientX: startX + 100,
@@ -594,100 +439,37 @@ async function selectDragDropAnswer(toDrag, toDrop)
         clientX: endX,
         clientY: endY
     }));
-    toDrop.dispatchEvent(new MouseEvent('mouseup', {
+    dropDiv.dispatchEvent(new MouseEvent('mouseup', {
         bubbles: true,
         clientX: endX,
         clientY: endY
     }));
 }   
 
-async function getSelectedAnswers(answerInputs) {
-    let selected = [];
-    for (let i=0;i<answerInputs.length;i++)
-    {
-        let currentInput = answerInputs[i];
-        let taskType = currentInput.type;
-        switch (taskType) {
+async function updateSelectedAnswers(task) {
+    let fields = task.answerFields;
+    for (let field of fields) {
+        switch (field.type) {
         case 'select':
-            selected.push(isMultiChoiceAnswerSelected(currentInput.element));
+            field.value = isMultiChoiceAnswerSelected(field.element);
             break;
         case 'dropdown':
-            selected.push(dropdownAnswerSelected(currentInput.element));
+            field.value = dropdownAnswerSelected(field.element);
             break;
-        case 'custom_number':
-            selected.push(CustomNumberAnswerSelected(currentInput.element));
+        case 'customNumber':
+            field.value = CustomNumberAnswerSelected(field.element);
             break;
-        case 'dragdrop':
-            let selAns = currentInput.element.div.querySelector('div.cdk-drag');
-            if (selAns) {
-                let selectedIndex = DDdragElements.map(el => el.id).indexOf(await getTaskDDfieldID(selAns, 'drag'));
-                selected.push(selectedIndex === -1 ? false : DDdragElements[selectedIndex].id);
-                if (selectedIndex === -1) {
-                    console.log('Selected drag element not found in known elements:', await getTaskDDfieldID(selAns, 'drag'));
-                    console.log('Available drag elements:', DDdragElements.map(el => el.id));
-                }
-            }
-            else {
-                selected.push(false);
+        case 'dragDrop':
+            let draggedElement = field.element.querySelector('div.cdk-drag');
+            if (draggedElement) {
+                field.value = await getTaskDDfieldID(draggedElement, 'drag');
+            } else {
+                field.value = false;
             }
             break;
         default:
-            console.log('Task type not supported for auto answer reading (yet?). ' + taskType);
-            new taskStatus('unknown taskType in getSelectedAnswers: ' + taskType, 'error');
-            break;
+            console.log('unknown taskType in updateSelectedAnswers: ', field.type);
         }
-    }
-    return selected;
-}
-
-// useless shit and probably (definitely) doesnt even work anymore
-async function clearSelectedAnswers(taskType,divs) {
-    //this whole thing isnt needed, because we wont autofill answers if there are already answers
-    //but it is here because why not, half of it isnt implemented anyway because answers just override old ones in some task types
-    // or its impossible (without rewriting everyhting differently)
-    let selectedAnswers = await getSelectedAnswers(taskType, divs);
-
-    switch (taskType) {
-        case 'select_text':
-            for (let i = 0; i < divs.length; i++) {
-                if (selectedAnswers[i] == true) {
-                    clickdiv(divs[i]);
-                }
-            }
-            break;
-        case 'select_image':
-            for (let i = 0; i < divs.length; i++) {
-                if (selectedAnswers[i] == true) {
-                    clickdiv(divs[i]);
-                }
-            }
-            break;
-        case 'dropdown':
-            //not needed, because the input will let stuff be overriden
-            break;
-        case 'category_select':
-            for (let i = 0; i < divs.length; i++) {
-                for (let j = 0; j < divs[i].length; j++) {
-                    if (selectedAnswers[i][j] == true) {
-                        clickdiv(divs[i][j]);
-                    }
-                }
-            }
-            break;
-        case 'custom_number':
-            //not needed, because the input will let stuff be overriden
-            break;
-        case 'drag_drop_grid':
-            //not really possible, cant know where you need to drag it back to, if I drag it to wrogn spot, it just wont move
-            //so this is not implemented
-            break;
-        case 'drag_drop_text':
-            //not really possible, cant know where you need to drag it back to, if I drag it to wrogn spot, it just wont move
-            //so this is not implemented
-            break;
-        default:
-            console.log('Task type not supported for auto answer clearing (yet).');
-            break;
     }
 }
 
@@ -717,23 +499,16 @@ function unblockUserInteraction() {
     if (blocker) blocker.remove();
 }
 
-function zoomOut() {
+function zoomOut(zoomPercent = 25) {
     let oldZoom = document.body.style.zoom;
-    document.body.style.zoom = '25%';
+    document.body.style.zoom = `${zoomPercent}%`;
     let tkelo = document.querySelector("tk-elonezet");
     if (tkelo) tkelo.style.height = "3000px"; // for some reason the page doesnt extend automatically, so this is a workaround
     // scale status indicator to compensate for page zoom so it stays readable
     try {
-        // compute inverse scale from zoom percent (e.g. '25%' -> 4)
-        const z = document.body.style.zoom;
-        if (z && z.endsWith('%')) {
-            const pct = parseFloat(z.slice(0, -1));
-            if (!isNaN(pct) && pct > 0) {
-                scaleTaskStatuses(1 / (pct / 100));
-            }
-        }
+        scaleTaskStatuses(1 / (zoomPercent / 100));
     } catch (e) {
-        console.log('scaleTaskStatuses failed on zoomOut', e);
+        console.log(`error zooming out to ${zoomPercent}%`, e);
     }
     return oldZoom;
 }
@@ -746,67 +521,105 @@ function zoomIn(oldZoom) {
     try { scaleTaskStatuses(1); } catch (e) { console.log('scaleTaskStatuses failed on zoomIn', e); }
 }
 
-async function writeAnswers(task, answerInputs, answersToWrite) {
-    //await clearSelectedAnswers(taskType, divs);
-    
-    //wait while the loading logo is visible
-    while (document.querySelector('svg.ng-tns-c107-0') != null) {
+async function waitForLoadingScreen() {
+    while (document.querySelector(taskFieldSelectors.loadingLogo)) {
         await new Promise(resolve => setTimeout(resolve, 100));
-        //console.log('logo detected, waiting...');
     }
+    return;
+}
+
+function selectMultiChoiceAnswer(multiChoiceDiv) {
+    multiChoiceDiv.click();
+    return;
+}
+
+function selectCustomNumberAnswer(customNumberDiv, answer) {
+    customNumberDiv.value = answer;
+    customNumberDiv.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+async function findDragDivFromID(dragID) {
+    const dragDivs = document.querySelectorAll(taskFieldSelectors.dragDrop.drag);
+    for (let i = 0; i < dragDivs.length; i++) {
+        if (await getTaskDDfieldID(dragDivs[i], 'drag') === dragID) {
+            return dragDivs[i];
+        }
+    }
+    return null;
+}
+
+async function waitForDropAnimation(dropDiv) {
+    while (
+        dropDiv.classList.contains('cdk-drop-list-receiving') ||
+        dropDiv.classList.contains('cdk-drop-list-dragging') ||
+        dropDiv.classList.contains('cdk-drag-animating')
+    ) {
+        await new Promise(resolve => setTimeout(resolve, 50)); // wait for the drag and drop animation to complete
+    }
+    await new Promise(resolve => setTimeout(resolve, 100)); // extra buffer wait
+}
+
+async function checkDragSuccess(dropDiv) {
+    if (
+        dropDiv.querySelector('div.cdk-drag.cella-dd') ||
+        dropDiv.querySelector('div.cdk-drag.szoveg-dd-tartalom')) {
+        return true;
+    }
+    return false;
+}
+
+/** Automatically writes answers to all input fields
+ * @param {Array<answerField>} answerFields - The answer fields to write to
+ * @param {Array<string>} answersToWrite - The answers to write to the fields
+ * 
+*/
+async function writeAnswers(task, answerFields, answersToWrite) {
+    
+    //cant click anything while loading screen is up
+    await waitForLoadingScreen();
+
     let oldZoom = -1;
-    for (let i=0;i<answerInputs.length;i++)
+    for (let i=0;i<answerFields.length;i++)
     {
-        let currentInput = answerInputs[i];
+        let currentInput = answerFields[i];
         let currentToWrite = answersToWrite[i];
+
+        //no need to write if we have same answer or the toWrite is empty
         if (!currentToWrite || currentInput.value === currentToWrite) continue;
         
         let taskType = currentInput.type;
         switch (taskType) {
         case 'select':
-            clickdiv(currentInput.element);
+            selectMultiChoiceAnswer(currentInput.element);
             break;
         case 'dropdown':
             selectDropdownOption(currentInput.element, currentToWrite);
             break;
-        case 'custom_number':
-            currentInput.element.value = currentToWrite;
-            currentInput.element.dispatchEvent(new Event('input', { bubbles: true })); //idk kell-e de csak nem árt...
+        case 'customNumber':
+            selectCustomNumberAnswer(currentInput.element, currentToWrite);
             break;
-        case 'dragdrop':
+        case 'dragDrop':
             blockUserInteraction();
             let fails = 0;
             let succeeded = false;
-            while(fails < 5 && !succeeded) {
-                let dragDiv = null;
-                for(let i = 0; i < DDdragElements.length; i++) {
-                    if (DDdragElements[i].id === currentToWrite) {
-                        dragDiv = DDdragElements[i].div;
-                        break;
-                    }
-                }
+            //retry up to 5 times, as this one often fails
+            while(!succeeded && fails < 5) {
+                let dragDiv = await findDragDivFromID(currentToWrite);
                 if (dragDiv === null) {
-                    console.log('Drag element not found:', currentToWrite);
-                    console.log('Available drag elements:', DDdragElements.map(el => el.id));
+                    console.log('Drag element not found with this ID:', currentToWrite);
                     break;
                 }
-                if (oldZoom === -1) oldZoom = zoomOut(); // zoom out to make sure everything is on-screen (only if we havent yet)
-                let dropDiv = currentInput.element.div;
-                unblockUserInteraction();
+                // because scrolling to elements messes up coords for some reason
+                if (oldZoom === -1) oldZoom = zoomOut(); //only zoom out once, not separately for each answer
+                
+                let dropDiv = currentInput.element;
+                unblockUserInteraction(); // so the auto inputs go through
                 await selectDragDropAnswer(dragDiv, dropDiv);
-                blockUserInteraction();
-                while(dropDiv.classList.contains('cdk-drop-list-receiving') || dropDiv.classList.contains('cdk-drop-list-dragging') || dropDiv.classList.contains('cdk-drag-animating')) {
-                    await new Promise(resolve => setTimeout(resolve, 50)); // wait for the drag and drop animation to complete
-                }
-                await new Promise(resolve => setTimeout(resolve, 100)); // extra buffer wait
-                //check if drag was successful
-                if (!dropDiv.querySelector('div.cdk-drag.cella-dd') && !dropDiv.querySelector('div.cdk-drag.szoveg-dd-tartalom')) {
-                    fails++;
-                    console.log('Drag and drop failed for:', currentToWrite, "cnt:", fails);
-                }
-                else {
-                    succeeded = true;
-                }
+                blockUserInteraction(); // because the user could still fuck up the animation with a click
+
+                await waitForDropAnimation(dropDiv);
+                
+                await checkDragSuccess(dropDiv) ? succeeded = true : fails++;
             }
             break;
         default:
@@ -816,56 +629,41 @@ async function writeAnswers(task, answerInputs, answersToWrite) {
     }
     }
     if (oldZoom !== -1) {
-        zoomIn(oldZoom); // zoom back in if we zoomed out for DnD
+        zoomIn(oldZoom); // zoom back in if we zoomed out for dragDrop
     }
+
+    await updateSelectedAnswers(task);
+
     unblockUserInteraction();
 }
-//store draggable elements globally, drop points go in task.answerInputs
-let DDdragElements = [];
+
+function dedupeByKey(items, key) {
+    const seen = new Set();
+    return items.filter(item => {
+        const value = item[key];
+        if (seen.has(value)) return false;
+        seen.add(value);
+        return true;
+    });
+}
 
 async function getTask() {
-    DDdragElements = [];
-    let name = getTaskName();
-    let question = getTaskUniqueID();
-    let description = getTaskDescription();
+    let uniqueID = await getTaskUniqueID();
     let answers = [];
+    answers.push(
+        ...await getAnswerFields(taskFieldSelectors.selectText.answers, 'select'),
+        ...await getAnswerFields(taskFieldSelectors.selectImage.answers, 'select'),
+        ...await getAnswerFields(taskFieldSelectors.categorySelect.answers, 'select'),
+        ...await getAnswerFields(taskFieldSelectors.dropdown.answers, 'dropdown'),
+        ...await getAnswerFields(taskFieldSelectors.customNumber.answers, 'customNumber'),
+        ...await getAnswerFields(taskFieldSelectors.dragDrop.drop, 'dragDrop', async (div) => await getTaskDDfieldID(div, 'drop'))
+    );
 
-    // text/image multiple choice
-    multiChoiceAnswers = getTaskTextAnswerFields();
-    multiChoiceAnswers = multiChoiceAnswers.map(answer => new answerField('select', answer, false));
-    answers.push(...multiChoiceAnswers);
+    answers = dedupeByKey(answers, 'element'); // de-dupe fields to avoid double entries of text and image selects
 
-    //dropdowns
-    dropdownAnswers = getTaskDropdownFields();
-    dropdownAnswers = dropdownAnswers.map(answer => new answerField('dropdown', answer, false));
-    answers.push(...dropdownAnswers);
-
-    // category selects
-    let categorySelectAnswers = getTaskCategorySelectFields();
-    categorySelectAnswers = categorySelectAnswers.map(answer => new answerField('select', answer, false));
-    answers.push(...categorySelectAnswers);
-
-    // custom number/text fields
-    customTextAnswers = getTaskCustomNumberFields();
-    customTextAnswers = customTextAnswers.map(answer => new answerField('custom_number', answer, false));
-    answers.push(...customTextAnswers);
-
-    // grid-type drag and drop
-    DDgridanswers = await getTaskDragDropFields();
-    DDgridanswers[0].forEach((element, index) => {
-        let dragField = new DDfield(element, DDgridanswers[2][index]);
-        DDdragElements.push(dragField);
-    });
-    DDgridanswers[1].forEach((element, index) => {
-        let dropField = new DDfield(element, DDgridanswers[3][index]);
-        answers.push(new answerField('dragdrop', dropField, false));
-    });
-    
-    let selectedAnswers = await getSelectedAnswers(answers);
-    selectedAnswers.forEach((selection, ind) => {
-        answers[ind].value = selection;
-    });
-    let t = new task(name, question, description, answers, selectedAnswers);
+    let t = new task(uniqueID,answers);
+    updateSelectedAnswers(t); //initial update of selected answers
+    console.log('Detected task:', t);
     return t;
 }
 
@@ -892,78 +690,78 @@ function fetchTaskFromBackground(url, options) {
     });
 }
 
-function hasAnswers(current_task) {
-    for (let i=0;i<current_task.answerInputs.length;i++) {
-        if(current_task.answerInputs[i].value) return true;
+function hasAnswers(answerFields) {
+    for (let i=0;i<answerFields.length;i++) {
+        if(answerFields[i].value) return true;
     }
     return false;
 }
-
-async function syncTaskWithDB(current_task) {   //current_task is a copy here, it also has faulty answerInputs cuz those are HTML elements
-
-    const dburl = settings.url+"solution/"; // http://strong-finals.gl.at.ply.gg:36859/solution
-
-    if(!hasAnswers(current_task)) {
-        let task = {
-            name: current_task.name,
-            question: current_task.question,
-            type: current_task.type
-        };
-        let user = {
-            name: settings.name,
-            azonosito: getUserID()
-        };
-        
-        try {
-            //console.log('Fetching solution for task:', task, 'and user:', user);
-            const reply = await sendRequestToBackground({
-                type: 'getSolution',
-                task: task,
-                user: user
-            });
-            if(reply.status != "ok"){
-                console.log('Error getting solution:', reply);
-                console.log('task sent:', reply);
-                return;
-            }
-            //console.log('Solution fetched successfully', reply);
-            return reply.solution;
+async function fetchTaskSolution(task) {
+    let taskData = {
+        ID: task.uniqueID,
+    };
+    let user = {
+        name: settings.name,
+        azonosito: getUserID()
+    };
+    
+    try {
+        //console.log('Fetching solution for task:', task, 'and user:', user);
+        const reply = await sendRequestToBackground({
+            type: 'getSolution',
+            task: taskData,
+            user: user
+        });
+        if(reply.status != "ok"){
+            console.log('Error getting solution:', reply);
+            console.log('task sent:', reply);
+            return;
         }
-        catch (error) {
-            console.log('Error fetching task from DB:', error);
+        //console.log('Solution fetched successfully', reply);
+        return reply.solution;
+    }
+    catch (error) {
+        console.log('Error fetching task from DB:', error);
+        return;
+    }
+}
+
+async function sendTaskSolution(task) {
+    const taskData = {
+        ID: task.uniqueID,
+        solution: task.answerFields.map(field => field.value)
+    };
+    const user = {
+        name: settings.name,
+        azonosito: getUserID()
+    };
+    try {
+        const reply = await sendRequestToBackground({
+            type: 'postSolution',
+            task: taskData,
+            user: user
+        });
+        //console.log('Posting solution to DB:', task, 'for user:', user);
+        if (reply && reply.status === "ok") {
+            console.log('Solution posted successfully', reply);
+            return reply;
+        } else {
+            console.log('Error posting solution:', reply);
             return;
         }
     }
+    catch (error) {
+        console.log('Error posting solution:', error);
+        return;
+    }
+}
+
+async function syncTaskWithDB(task) {
+    if(!hasAnswers(task.answerFields)) {
+        await fetchTaskSolution(task);
+    }
     else {
-        const task = {
-            name: current_task.name,
-            question: current_task.question,
-            description: current_task.description,
-            solution: current_task.selectedAnswers
-        };
-        const user = {
-            name: settings.name,
-            azonosito: getUserID()
-        };
-        try {
-            const reply = await sendRequestToBackground({
-                type: 'postSolution',
-                task: task,
-                user: user
-            });
-            //console.log('Posting solution to DB:', task, 'for user:', user);
-            if (reply && reply.status === "ok") {
-                console.log('Solution posted successfully', reply);
-                return reply;
-            } else {
-                console.log('Error posting solution:', reply);
-                return;
-            }
-        }
-        catch (error) {
-            console.log('Error posting solution:', error);
-            return;
-        }
+        await sendTaskSolution(task);
     }
     return;
 }
@@ -985,8 +783,7 @@ function loadSettings() {
             settings.url = items.url;
             if (settings.url.includes("strong-finals.gl.at.ply.gg:36859")) { // update old playit URL
                 console.warn('old playit URL detected');
-                //show a red status as well as warning
-                let oldUrlIndicator = new taskStatus('Régi playit URL van beállítva, ha ez nem direkt van, frissítsd "https://tekaku.hu/"-ra a beállítások -> advanced menüben', 'error');
+                let oldUrlIndicator = new taskStatus('Régi URL van beállítva, ha ez nem direkt van, frissítsd "https://tekaku.hu/"-ra a beállítások -> advanced menüben', 'error');
             }
             settings.autoComplete = items.autoComplete;
             resolve(items);
@@ -1120,21 +917,10 @@ async function sendRequestToBackground(request) {
     });
 }
 
-async function updateUserAnswers(current_task, event) {
-    if (typeof current_task != 'undefined' && current_task != null) {
-        let selections_pre = await getSelectedAnswers(current_task.answerInputs);
-        if (selections_pre.length != 0) {
-            console.log('Selected answers:', selections_pre);
-            current_task.selectedAnswers = selections_pre;
-            current_task.answerInputs.forEach((input, ind) => {
-                input.value = current_task.selectedAnswers[ind];
-            });
-        }
-    }
-}
-
 var settings = {};
-async function main_loop() {
+
+async function initialize() {
+    //load stored settings on startup
     let settings_task = new taskStatus('beállítások betöltése');
     try {
         await loadSettings();
@@ -1143,56 +929,122 @@ async function main_loop() {
         settings_task.error({"text": "hiba a beállítások betöltésekor: " + error});
     }
 
-    // Connect to background and retry on failure with exponential backoff
-    let backoff = 500; // ms
-    const maxBackoff = 8000; // ms
+    // Connect to background and retry on failure with increasing timeouts
+    let retryTimeout = 500; // ms
+    const maxRetryTimeout = 8000; // ms
     let retryCnt = 0;
-    const maxRetries = 5;
-    let connect_status = new taskStatus('kapcsolódás a szerverhez...', 'processing');
+    const maxRetryCnt = 5;
+    let connectStatus = new taskStatus('kapcsolódás a szerverhez...', 'processing');
     while (true) {
         try {
             await connectToBackground();
-            connect_status.succeed();
+            connectStatus.succeed();
             break; // connected
         } catch (err) {
             console.log('connectToBackground failed:', err);
             retryCnt++;
-            if (retryCnt >= maxRetries) {
-                connect_status.error({"text": 'Max újrakapcsolódási kísérlet elérve, frissítse az oldalt az újrapróbálkozáshoz'});
+            if (retryCnt >= maxRetryCnt) {
+                connectStatus.error({"text": 'Max újrakapcsolódási kísérlet elérve, frissítse az oldalt az újrapróbálkozáshoz'});
                 console.log('Max retries reached, giving up.');
                 return 504;
             }
-            connect_status.set_text('kapcsolódás a szerverhez... (újrapróbálkozás ' + retryCnt + '/' + maxRetries + ')');
-            await new Promise(resolve => setTimeout(resolve, backoff));
-            backoff = Math.min(maxBackoff, Math.floor(backoff * 1.8));
+            connectStatus.set_text('kapcsolódás a szerverhez... (újrapróbálkozás ' + retryCnt + '/' + maxRetryCnt + ')');
+            await new Promise(resolve => setTimeout(resolve, retryTimeout));
+            retryTimeout = Math.min(maxRetryTimeout, Math.floor(retryTimeout * 1.8));
             
         }
     }
-    //fetchAnnouncements();
 
+
+    //fetchAnnouncements();
+}
+
+async function detectUrlChange() {
+    url = window.location.href;
+    while (url === window.location.href) {
+        await new Promise(resolve => setTimeout(resolve, 250));
+    }
+}
+
+async function waitForTask() {
+    while (!isThereTask() || await getTaskUniqueID() === null) {
+        await new Promise(resolve => setTimeout(resolve, 250));
+    }
+}
+
+async function goToNextTask() {
+    const buttons = document.querySelectorAll('button.btn.btn-secondary.d-block');
+    if (buttons.length == 2) { // a prev. and next button should show up
+        buttons[buttons.length - 1].click();
+        window.scrollTo(0, document.body.scrollHeight); // ???
+        await new Promise(resolve => setTimeout(resolve, 50));
+        console.log('went to next task');
+    }
+}
+
+async function tryAutoFillTask(task, taskFillStatus, autoNext) {
+    taskFillStatus.set_text('válasz kérése szervertől...');
+    const queryResult = await fetchTaskSolution(task);
+    if (queryResult) {
+        console.log('Query result:', queryResult);
+        await loadSettings();
+        if (queryResult.totalVotes >= settings.minvotes && 100*queryResult.votes / queryResult.totalVotes >= settings.votepercentage) {
+            console.log('Enough votes and enough percentage of votes.');
+            taskFillStatus.set_text('válasz beírása...');
+            await writeAnswers(task, task.answerFields, JSON.parse(queryResult.answer));
+            //await new Promise(resolve => setTimeout(resolve, 300));
+            taskFillStatus.succeed({"text": "válasz beírása kész"});
+            //scroll to bottom of the page
+            
+            if (autoNext) {
+                await goToNextTask();
+            }
+        }
+        else {
+            taskFillStatus.fail({text: `nem elég a leadott válasz (${queryResult.votes}/${queryResult.totalVotes} ugyanolyan : ${100*queryResult.votes / queryResult.totalVotes}%), 
+                kéne: ${settings.minvotes} össz válasz és ${settings.votepercentage}%`, status: 'skipped'});
+            console.log('Not enough votes or not enough percentage of votes.');
+            console.log('Total votes:', queryResult.totalVotes, "required votes:", settings.minvotes);
+            console.log('Vote%:', 100*queryResult.votes / queryResult.totalVotes , "required vote%:", settings.votepercentage);
+        }
+    }
+    else {
+        taskFillStatus.fail({text: 'nincs még erre a feladatra leadott válasz',status: 'skipped'});
+        console.log('No solution found in the database.');
+    }
+}
+
+async function main_loop() {
+    
+    await initialize();
+    
     let last_url = '';
     let url = '';
-    let current_task = null;
+    let currentTask = null;
+    /**
+     * Stores the answers filled in the current task when task is first loaded to detect changes
+     * @type {Array<answerField>}
+     */
     let taskFilledAnswers = [];
     let selectedAnswers = [];
-    let sendResults = true;
 
     let autoNext = false;
 
     document.addEventListener('click', async function(event) {
-        if (document.getElementById('__input-blocker')) return;
+        if (document.getElementById('__input-blocker') || currentTask === null) return;
         try {
-            updateUserAnswers(current_task, event);
-            if (event.target.classList.contains('btn-danger')) { // lezárás gomb elv. ilyen
-                if (settings.isContributor && current_task != null && hasAnswers(current_task) && taskFilledAnswers.toString() !== current_task.answerInputs.map(input => input.value).toString()) {
+            updateSelectedAnswers(currentTask, event);
+            // a 'lezárás' gomb ilyen, ekkor elküldjük az utolsó feladatot, mivel nem lesz következő amit érzékelünk
+            if (event.target.classList.contains('btn-danger')) { 
+                if (settings.isContributor && currentTask != null && hasAnswers(currentTask.answerFields) && taskFilledAnswers !== currentTask.answerFields) {
                     console.log('lezárás clicked, syncing last task');
-                    let syncPromise = syncTaskWithDB(current_task);
-                    let finalSyncStatus = new taskStatus('utolsó feladat szinkronizálása...', 'processing');
+                    let syncPromise = syncTaskWithDB(currentTask);
+                    let finalSyncStatus = new taskStatus('utolsó feladat küldése...', 'processing');
                     console.log('Sync promise:', syncPromise);
                     syncPromise.then(() => {
-                        finalSyncStatus.succeed({"text": "utolsó feladat szinkronizálása kész"});
+                        finalSyncStatus.succeed({"text": "utolsó feladat küldése kész"});
                     }).catch((error) => {
-                        finalSyncStatus.error({"text": "hiba az utolsó feladat szinkronizálása során: " + error});
+                        finalSyncStatus.error({"text": "hiba az utolsó feladat küldése során: " + error});
                     });
                     sendResults = false;
             }
@@ -1206,27 +1058,20 @@ async function main_loop() {
     // Listen for key presses, just used for debug
     document.addEventListener('keydown', async function(event) {
         if (event.key.toLowerCase() === 'i') {
-            if (current_task != null) {
+            if (currentTask != null) {
                 console.log('URL:', url);
-                console.log('Current task:', current_task);
+                console.log('Current task:', currentTask);
             }
         }
         else if (event.key.toLowerCase() === 's') {
-            if (current_task != null) {
-                console.log('Syncing task with DB (keybind clicked)...');
-                syncTaskWithDB(current_task);
+            if (currentTask != null) {
+                console.log('Syncing task with DB (keybind clicked)... , ', hasAnswers(currentTask.answerFields) ? 'has answers' : 'no answers');
+                syncTaskWithDB(currentTask);
             }
         }
-        else if(event.key.toLowerCase() === 't') {
-            if (current_task != null) {
-                console.log(await sendRequestToBackground({
-                    type: 'getSolution',
-                    task: JSON.parse(JSON.stringify(current_task)),
-                    user: {
-                        name: settings.name,
-                        azonosito: getUserID()
-                    }
-                }));
+        else if(event.key.toLowerCase() === 'u') {
+            if (currentTask != null) {
+                console.log('user ID:', getUserID());
             }
         }
         else if (event.ctrlKey && event.key.toLowerCase() === 'b') {
@@ -1238,98 +1083,60 @@ async function main_loop() {
                 blockUserInteraction();
             }
         }
-    });
-
-    while (true) {
-        url = window.location.href;
-        //idle loop, no new url found
-        if (last_url == url && last_url != '') {
-            await new Promise(resolve => setTimeout(resolve, 500));
-            continue;
+        else if (event.key.toLowerCase() === 'h') {
+            console.log('current task ID: ', await getTaskUniqueID());
         }
+    });
+    while (true) {
+        if (currentTask) await detectUrlChange(); //if no task yet, we should immediately see if there is one
         
-        //when a new url is found
-        //wait for the page to show a task
         console.log('New URL, waiting for task...');
         let getTaskStatus = new taskStatus('feladatra várakozás...', 'processing');
-        while (!isThereTask() || getTaskName() == '' || getTaskUniqueID() == 'No ID found.') {
-            await new Promise(resolve => setTimeout(resolve, 500));
-        }
+        await waitForTask();
         console.log('task seen');
         getTaskStatus.set_text("feladat észlelve");
 
-        last_url = url;
-
-        if (settings.isContributor && current_task != null && hasAnswers(current_task) && taskFilledAnswers.toString() !== current_task.answerInputs.map(input => input.value).toString()) {
-            console.log('New task, syncing old one with DB...');
-            console.log(`filled answers at begin: '${taskFilledAnswers}'`);
-            console.log(`current task answers: '${current_task.answerInputs.map(input => input.value)}'`);
-            const syncPromise = syncTaskWithDB(current_task);
+        if (settings.isContributor && currentTask != null && hasAnswers(currentTask.answerFields) && taskFilledAnswers.toString() !== currentTask.answerFields.map(input => input.value).toString()) {
+            console.log('New task found, syncing old one with DB...');
             let syncstatus = new taskStatus('előző feladat szinkronizálása...', 'processing');
-            syncPromise.then(() => {
+            syncTaskWithDB(currentTask).then(() => {
                 syncstatus.succeed({"text": "előző feladat szinkronizálása kész"});
             }).catch((error) => {
                 syncstatus.error({"text": "hiba az előző feladat szinkronizálása során: " + error});
             });
         }
-        sendResults = true;
-        current_task = await getTask();
+        else {
+            console.log('not syncing prev. task because: ',)
+            !settings.isContributor ? console.log('user not a contributor') : 
+            currentTask == null ? console.log('no current task') : 
+            !hasAnswers(currentTask ? currentTask.answerFields : []) ? console.log('no answers') : 
+            taskFilledAnswers.toString() === currentTask.answerFields.map(input => input.value).toString() ? console.log('no changes from prev. filled answers') : console.log('WTF?');
+
+        }
+
+        currentTask = await getTask();
+
         getTaskStatus.succeed({"text": "feladat feldolgozva"});
         url = window.location.href;
         last_url = url;
 
         let taskFillStatus = new taskStatus('feladat kitöltése...', 'processing');
 
-        if (hasAnswers(current_task)) {
+        if (hasAnswers(currentTask.answerFields)) {
             console.log('Already has answers, skipping autofill...');
             taskFillStatus.fail({text: "már van valami beírva; kihagyva", color:'rgba(156, 39, 176, 0.85)'});
-            sendResults = false;
         }
         else if (settings.autoComplete) {
             try {
-                taskFillStatus.set_text('válasz kérése szervertől...');
-                const queryPromise = syncTaskWithDB(current_task);
-                let queryResult = await queryPromise;
-                if (queryResult != null) {
-                    console.log('Query result:', queryResult);
-                    await loadSettings();
-                    if (queryResult.totalVotes >= settings.minvotes && 100*queryResult.votes / queryResult.totalVotes >= settings.votepercentage) {
-                        sendResults = false;
-                        console.log('Enough votes and enough percentage of votes.');
-                        taskFillStatus.set_text('válasz beírása...');
-                        await writeAnswers(current_task, current_task.answerInputs, JSON.parse(queryResult.answer));
-                        //await new Promise(resolve => setTimeout(resolve, 300));
-                        taskFillStatus.succeed({"text": "válasz beírása kész"});
-                        //scroll to bottom of the page
-                        
-                        const buttons = document.querySelectorAll('button.btn.btn-secondary.d-block');
-                        if (autoNext && buttons.length == 2) {
-                            clickdiv(buttons[buttons.length - 1]);
-                            window.scrollTo(0, document.body.scrollHeight);
-                            await new Promise(resolve => setTimeout(resolve, 50));
-                            console.log('Answers written and task submitted.');
-                        }
-                    }
-                    else {
-                        taskFillStatus.fail({text: `nem elég a leadott válasz (${queryResult.votes}/${queryResult.totalVotes} ugyanolyan : ${100*queryResult.votes / queryResult.totalVotes}%), 
-                            kéne: ${settings.minvotes} össz válasz és ${settings.votepercentage}%`, status: 'skipped'});
-                        console.log('Not enough votes or not enough percentage of votes.');
-                        console.log('Total votes:', queryResult.totalVotes, "required votes:", settings.minvotes);
-                        console.log('Vote%:', 100*queryResult.votes / queryResult.totalVotes , "required vote%:", settings.votepercentage);
-                    }
-                }
-                else {
-                    taskFillStatus.fail({text: 'nincs még erre a feladatra leadott válasz',status: 'skipped'});
-                    console.log('No solution found in the database.');
-                }
+                await tryAutoFillTask(currentTask, taskFillStatus, autoNext);
             }
             catch (error) {
                 taskFillStatus.error({"text": "hiba a feladat lekérése során: " + error});
                 console.log('Error fetching task from DB:', error);
             }
         }
-
-        taskFilledAnswers = await getSelectedAnswers(current_task.answerInputs); //the answers that were there when task loaded, or after autocomplete
+        await updateSelectedAnswers(currentTask);
+        taskFilledAnswers = JSON.parse(JSON.stringify(currentTask.answerFields.map(input => input.value))); //the answers that were there when task loaded, or after autocomplete
     }
 }
 
