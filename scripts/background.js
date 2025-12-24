@@ -1,3 +1,4 @@
+/* global chrome */
 let wsGlobal = null;
 
 chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {

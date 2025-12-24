@@ -9,11 +9,17 @@
   },
   "content_scripts": [
     {
-      "js":["main.js"],
+      "js":["scripts/content_loader.js"],
       "matches": [
         "*://*.tehetsegkapu.hu/*",
         "*://tehetsegkapu.hu/*"
       ]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["scripts/*.js", "task_logic/*.js"],
+      "matches": ["*://*.tehetsegkapu.hu/*", "*://tehetsegkapu.hu/*"]
     }
   ],
   "permissions": [
@@ -23,6 +29,6 @@
     "https://tekaku.hu/*"
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "scripts/background.js"
   }
 }
