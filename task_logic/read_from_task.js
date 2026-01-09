@@ -1,4 +1,4 @@
-import { dedupeByKey, waitForImageLoad, hashImageToID, hashSHA256} from '../scripts/utils.js';
+import { dedupeByKey, waitForImageLoad, hashImageToID, hashSHA256, debugLog} from '../scripts/utils.js';
 import { taskFieldSelectors } from '../scripts/constants.js';
 
 export { answerField, task, isThereTask, getTaskUniqueID, getTaskDDfieldID,getUserID, updateSelectedAnswers, getTask, hasAnswers }
@@ -157,7 +157,7 @@ async function updateSelectedAnswers(task) {
             }
             break;
         default:
-            console.log('unknown taskType in updateSelectedAnswers: ', field.type);
+            debugLog('unknown taskType in updateSelectedAnswers: ', field.type);
         }
     }
 }
@@ -177,7 +177,7 @@ async function getTask() {
     answers = dedupeByKey(answers, 'element'); // de-dupe fields to avoid double entries of text and image selects
 
     let t = new task(uniqueID,answers);
-    console.log('Detected task:', t);
+    debugLog('Detected task:', t);
     return t;
 }
 

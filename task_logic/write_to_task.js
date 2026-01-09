@@ -1,7 +1,7 @@
 import { answerField, updateSelectedAnswers } from './read_from_task.js';
 import { getTaskDDfieldID } from './read_from_task.js';
 import { taskFieldSelectors } from '../scripts/constants.js';
-import { waitForLoadingScreen, zoomOut, zoomIn, blockUserInteraction, unblockUserInteraction} from '../scripts/utils.js';
+import { waitForLoadingScreen, zoomOut, zoomIn, blockUserInteraction, unblockUserInteraction, debugLog} from '../scripts/utils.js';
 import { taskStatus } from '../scripts/task_statuses.js';
 
 export { writeAnswers };
@@ -24,7 +24,7 @@ function selectDropdownOption(div, option) {
             return;
         }
     }
-    console.log(`didnt find option: '${option}'`);
+    debugLog(`didnt find option: '${option}'`);
     new taskStatus(`didnt find dropdown option: '${option}'`, 'error');
 }
 
@@ -134,7 +134,7 @@ async function writeAnswers(task, answerFields, answersToWrite) {
             while(!succeeded && fails < 5) {
                 let dragDiv = await findDragDivFromID(currentToWrite);
                 if (dragDiv === null) {
-                    console.log('Drag element not found with this ID:', currentToWrite);
+                    debugLog('Drag element not found with this ID:', currentToWrite);
                     break;
                 }
                 // because scrolling to elements messes up coords for some reason
@@ -151,7 +151,7 @@ async function writeAnswers(task, answerFields, answersToWrite) {
             }
             break;
         default:
-            console.log('unknown taskType in writeAnswers: ', taskType);
+            debugLog('unknown taskType in writeAnswers: ', taskType);
             new taskStatus('unknown taskType in writeAnswers: ' + taskType, 'error');
             break;
     }

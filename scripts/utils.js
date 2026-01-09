@@ -1,7 +1,8 @@
-import { maxImageHashSize } from './constants.js';
-import { taskFieldSelectors } from './constants.js';    
+import { maxImageHashSize, taskFieldSelectors, _DEBUG } from './constants.js';   
 //utility funcs NOT requiring DOM access:
-export { dedupeByKey, hashSHA256, waitForImageLoad, waitForLoadingScreen}
+export { debugLog, dedupeByKey, hashSHA256, waitForImageLoad, waitForLoadingScreen}
+
+const debugLog = _DEBUG ? console.log.bind(console) : function(){};
 
 function dedupeByKey(items, key) {
     const seen = new Set();
@@ -73,7 +74,7 @@ function blockUserInteraction() {
     if (document.getElementById('__input-blocker')) return;
 
     // scroll to top to help ensure elements stay in place while we interact
-    try { window.scrollTo(0, 0); } catch (e) {console.log('scrollTo failed in blockUserInteraction, not necessarily fatal', e); }
+    try { window.scrollTo(0, 0); } catch (e) {debugLog('scrollTo failed in blockUserInteraction, not necessarily fatal', e); }
     const blocker = document.createElement('div');
     blocker.id = '__input-blocker';
     Object.assign(blocker.style, {
@@ -102,7 +103,7 @@ function zoomOut(zoomPercent = 25) {
     try {
         scaleTaskStatuses(1 / (zoomPercent / 100));
     } catch (e) {
-        console.log(`error scaling out task statuses`, e);
+        debugLog(`error scaling out task statuses`, e);
     }
     return oldZoom;
 }
@@ -112,7 +113,7 @@ function zoomIn(oldZoom) {
     let tkelo = document.querySelector("tk-elonezet");
     if (tkelo) tkelo.style.height = "100%"; // reset height to default
     // reset status indicator scale
-    try { scaleTaskStatuses(1); } catch (e) { console.log('scaleTaskStatuses failed on zoomIn', e); }
+    try { scaleTaskStatuses(1); } catch (e) { debugLog('scaleTaskStatuses failed on zoomIn', e); }
 }
 
 async function waitForLoadingScreen() {
@@ -143,7 +144,7 @@ function repositionTaskStatuses(scale = -1) {
             }
         });
     } catch (e) {
-        console.log('repositionTaskStatuses failed', e);
+        debugLog('repositionTaskStatuses failed', e);
     }
 }
 function scaleTaskStatuses(scale) {
@@ -156,6 +157,6 @@ function scaleTaskStatuses(scale) {
         // Also reposition with scaled spacing
         repositionTaskStatuses(scale);
     } catch (e) {
-        console.log('scaleTaskStatuses error', e);
+        debugLog('scaleTaskStatuses error', e);
     }
 }

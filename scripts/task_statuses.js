@@ -1,5 +1,5 @@
 
-import { repositionTaskStatuses} from './utils.js';
+import { repositionTaskStatuses, debugLog} from './utils.js';
 
 export class taskStatus {
     static taskStatusIndex = 0;
@@ -134,7 +134,7 @@ export class taskStatus {
             // Reposition remaining statuses
             repositionTaskStatuses();
         } catch (e) {
-            console.log('taskStatus destroy failed', e);
+            debugLog('taskStatus destroy failed', e);
         }
     }
 }

@@ -2,29 +2,18 @@
 import { taskStatus } from './task_statuses.js';
 import { getUserID, hasAnswers, isThereTask, getTaskUniqueID, updateSelectedAnswers, getTask } from '../task_logic/read_from_task.js';
 import { writeAnswers} from '../task_logic/write_to_task.js';
-import { autoNext } from './constants.js';
-import { blockUserInteraction, unblockUserInteraction} from './utils.js';
+import { autoNext, _DEBUG } from './constants.js';
+import { blockUserInteraction, unblockUserInteraction, debugLog} from './utils.js';
 
-function fetchTaskFromBackground(url, options) {
-    return new Promise((resolve, reject) => {
-        chrome.runtime.sendMessage(
-            { type: "fetchTask", url: url, options: options },
-            (response) => {
-                if (response && response.success) {
-                    // Return a Response-like object
-                    resolve({
-                        status: response.status,
-                        statusText: response.statusText,
-                        headers: response.headers,
-                        json: async () => response.data,
-                        text: async () => JSON.stringify(response.data),
-                        ok: response.status >= 200 && response.status < 300
-                    });
-                } else {
-                    reject(response ? response.error : "Unknown error");
-                }
-            }
-        );
+function fetchTask(url, options) {
+    return fetch(url, options).catch(error => {
+        return {
+            ok: false,
+            status: 0,
+            statusText: error.toString(),
+            json: async () => null,
+            text: async () => null
+        };
     });
 }
 
@@ -38,22 +27,22 @@ async function fetchTaskSolution(task) {
     };
     
     try {
-        //console.log('Fetching solution for task:', task, 'and user:', user);
-        const reply = await sendRequestToBackground({
+        //debugLog('Fetching solution for task:', task, 'and user:', user);
+        const reply = await sendRequestToWebSocket({
             type: 'getSolution',
             task: taskData,
             user: user
         });
         if(reply.status != "ok"){
-            console.log('Error getting solution:', reply);
-            console.log('task sent:', reply);
+            debugLog('Error getting solution:', reply);
+            debugLog('task sent:', reply);
             return;
         }
-        //console.log('Solution fetched successfully', reply);
+        //debugLog('Solution fetched successfully', reply);
         return reply.solution;
     }
     catch (error) {
-        console.log('Error fetching task from DB:', error);
+        debugLog('Error fetching task from DB:', error);
         return;
     }
 }
@@ -68,22 +57,22 @@ async function sendTaskSolution(task) {
         azonosito: getUserID()
     };
     try {
-        const reply = await sendRequestToBackground({
+        const reply = await sendRequestToWebSocket({
             type: 'postSolution',
             task: taskData,
             user: user
         });
-        //console.log('Posting solution to DB:', task, 'for user:', user);
+        //debugLog('Posting solution to DB:', task, 'for user:', user);
         if (reply && reply.status === "ok") {
-            console.log('Solution posted successfully', reply);
+            debugLog('Solution posted successfully', reply);
             return reply;
         } else {
-            console.log('Error posting solution:', reply);
+            debugLog('Error posting solution:', reply);
             return;
         }
     }
     catch (error) {
-        console.log('Error posting solution:', error);
+        debugLog('Error posting solution:', error);
         return;
     }
 }
@@ -127,7 +116,7 @@ async function fetchAnnouncements() {
     chrome.storage.sync.get({lastAnnouncment: "2025-05-25T04:26:14.000Z"},async (items) => {
         const announcementUrl = settings.url+'announcements/';
         
-        const response = await fetchTaskFromBackground(announcementUrl+items.lastAnnouncment, {
+        const response = await fetchTask(announcementUrl+items.lastAnnouncment, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json'
@@ -135,15 +124,15 @@ async function fetchAnnouncements() {
         });
         if (response.ok) {
             const announcements = await response.json();
-            console.log('Announcements fetched:', announcements);
+            debugLog('Announcements fetched:', announcements);
             if (announcements === null) {
-                console.log('No new announcements found.');
+                debugLog('No new announcements found.');
                 return false; // Return false if no new announcements
             }
             for (let i = 0; i < announcements.length; i++) {
                 const announcement = announcements[i];
                 items.lastAnnouncment = announcement.created_at;
-                console.log('New announcement:', announcement);
+                debugLog('New announcement:', announcement);
                 alert(`Új közlemény:\n${announcement.title}\n\n${announcement.content}\n\n${announcement.created_at}`);
             }
             if (items.lastAnnouncment) {
@@ -161,91 +150,85 @@ async function fetchAnnouncements() {
     });
 }
 
-let port = null;
-let wsOnMessage = null;
+let wsGlobal = null;
 let reqList = new Map();
 let reqListIndex = 1;
 
-// Tracks whether the background reported the WebSocket as connected
-let wsConnected = 0;
-
-function connectToBackground() {
+function getWebSocketUrl() {
     return new Promise((resolve, reject) => {
-        if (wsConnected) {
-            resolve();
-        }
-        wsOnMessage = (response) => {
-            console.log('Response from background:', response);
-        }
-        port = chrome.runtime.connect();
-        let settled = false;
-        const TIMEOUT_MS = 5000;
-
-        const onMessage = (response) => {
-            if(!response || response.id === undefined) {
-                if(response && response.type === 'wsConnected') {
-                    console.log('WebSocket connected to background script.');
-                    wsConnected++;
-                    if (!settled) { settled = true; clearTimeout(timer); resolve(); }
-                    return;
-                }
-                if(response && (response.type === 'wsError' || response.type === 'wsClosed')) {
-                    console.log('WebSocket error/closed:', response.error || response.type);
-                    wsConnected = Math.max(wsConnected - 1, 0);
-                    if (!settled) { settled = true; clearTimeout(timer); reject(new Error(response.type || 'wsError')); }
-                    return;
-                }
-                console.log('Invalid response received:', response, response && response.id);
-                return;
+        chrome.storage.sync.get({url: "https://tekaku.hu/"}, function(items) {
+            let url = items.url.replace(/^http/, 'ws');
+            if (!url.endsWith('/')) {
+                url += '/';
             }
-            if (typeof reqList.get(response.id) !== 'function') {
-                console.log('No request function found for response ID:', response.id);
-                return;
-            }
-            reqList.get(response.id)(response);
-            reqList.delete(response.id);
-        };
-
-        port.onMessage.addListener(onMessage);
-
-        port.onDisconnect.addListener(() => {
-            console.log('Port disconnected, reconnecting...');
-            port = null;
-            wsConnected = Math.max(wsConnected - 1, 0);
-            // try to reconnect in background; swallow any rejection from the retry
-            if (wsConnected < 1) connectToBackground().catch(err => console.log('reconnect failed', err));
+            resolve(url);
         });
-
-        // Timeout: reject if wsConnected not received in time
-        const timer = setTimeout(() => {
-            if (!settled) {
-                settled = true;
-                console.log('connectToBackground: timed out waiting for wsConnected');
-                reject(new Error(`timeout waiting for wsConnected after ${TIMEOUT_MS} ms`));
-            }
-        }, TIMEOUT_MS);
     });
 }
 
-async function sendRequestToBackground(request) {
+function connectWebSocket() {
     return new Promise((resolve, reject) => {
-        if (port == null) {
-            console.log('Port is not connected, reconnecting...');
-            connectToBackground();
+        if (wsGlobal && wsGlobal.readyState === WebSocket.OPEN) {
+            resolve();
+            return;
         }
+        
+        getWebSocketUrl().then(url => {
+            wsGlobal = new WebSocket(url);
+            
+            wsGlobal.onopen = () => {
+                debugLog('WebSocket connection established');
+                resolve();
+            };
+            
+            wsGlobal.onerror = error => {
+                console.error('WebSocket error:', error);
+                reject(error);
+            }
+            
+            wsGlobal.onmessage = event => {
+                //console.log('WebSocket message received:', event.data);
+                try {
+                    const response = JSON.parse(event.data);
+                     if (response.id && reqList.has(response.id)) {
+                        reqList.get(response.id)(response);
+                        reqList.delete(response.id);
+                    } else {
+                         debugLog('Received message without ID or handler:', response);
+                    }
+                } catch(e) {
+                    console.error('Error parsing WS message', e);
+                }
+            };
+            
+            wsGlobal.onclose = () => {
+                debugLog('WebSocket connection closed');
+                new taskStatus('WebSocket kapcsolat bontva (inaktivitás)').fail({stayTime: 2000, color: 'rgba(128, 128, 128, 0.85)'});
+                wsGlobal = null;
+            };
+        });
+    });
+}
+
+async function sendRequestToWebSocket(request) {
+    if (!wsGlobal || wsGlobal.readyState !== WebSocket.OPEN) {
+        debugLog('WebSocket not connected, connecting...');
+        await connectWebSocket();
+    }
+    
+    return new Promise((resolve, reject) => {
         if (typeof request !== 'object' || !request.type) {
             console.error('Invalid request format:', request);
             reject(new Error('Invalid request format'));
             return;
         }
         request.id = reqListIndex++;
-        //console.log('Sending request to background:', request);
+        
         reqList.set(request.id, (response) => {
             resolve(response);
-            return;
         });
         
-        port.postMessage(request);
+        wsGlobal.send(JSON.stringify(request));
     });
 }
 
@@ -269,15 +252,15 @@ async function initialize() {
     let connectStatus = new taskStatus('kapcsolódás a szerverhez...', 'processing');
     while (true) {
         try {
-            await connectToBackground();
+            await connectWebSocket();
             connectStatus.succeed();
             break; // connected
         } catch (err) {
-            console.log('connectToBackground failed:', err);
+            debugLog('connectWebSocket failed:', err);
             retryCnt++;
             if (retryCnt >= maxRetryCnt) {
                 connectStatus.error({"text": 'Max újrakapcsolódási kísérlet elérve, frissítse az oldalt az újrapróbálkozáshoz'});
-                console.log('Max retries reached, giving up.');
+                debugLog('Max retries reached, giving up.');
                 return 504;
             }
             connectStatus.set_text('kapcsolódás a szerverhez... (újrapróbálkozás ' + retryCnt + '/' + maxRetryCnt + ')');
@@ -310,7 +293,7 @@ async function goToNextTask() {
         buttons[buttons.length - 1].click();
         window.scrollTo(0, document.body.scrollHeight); // ???
         await new Promise(resolve => setTimeout(resolve, 50));
-        console.log('went to next task');
+        debugLog('went to next task');
     }
 }
 
@@ -318,10 +301,10 @@ async function tryAutoFillTask(task, taskFillStatus, autoNext) {
     taskFillStatus.set_text('válasz kérése szervertől...');
     const queryResult = await fetchTaskSolution(task);
     if (queryResult) {
-        console.log('Query result:', queryResult);
+        debugLog('Query result:', queryResult);
         await loadSettings();
         if (queryResult.totalVotes >= settings.minvotes && 100*queryResult.votes / queryResult.totalVotes >= settings.votepercentage) {
-            console.log('Enough votes and enough percentage of votes.');
+            debugLog('Enough votes and enough percentage of votes.');
             taskFillStatus.set_text('válasz beírása...');
             await writeAnswers(task, task.answerFields, JSON.parse(queryResult.answer));
             //await new Promise(resolve => setTimeout(resolve, 300));
@@ -335,14 +318,14 @@ async function tryAutoFillTask(task, taskFillStatus, autoNext) {
         else {
             taskFillStatus.fail({text: `nem elég a leadott válasz (${queryResult.votes}/${queryResult.totalVotes} ugyanolyan : ${100*queryResult.votes / queryResult.totalVotes}%), 
                 kéne: ${settings.minvotes} össz válasz és ${settings.votepercentage}%`, status: 'skipped'});
-            console.log('Not enough votes or not enough percentage of votes.');
-            console.log('Total votes:', queryResult.totalVotes, "required votes:", settings.minvotes);
-            console.log('Vote%:', 100*queryResult.votes / queryResult.totalVotes , "required vote%:", settings.votepercentage);
+            debugLog('Not enough votes or not enough percentage of votes.');
+            debugLog('Total votes:', queryResult.totalVotes, "required votes:", settings.minvotes);
+            debugLog('Vote%:', 100*queryResult.votes / queryResult.totalVotes , "required vote%:", settings.votepercentage);
         }
     }
     else {
         taskFillStatus.fail({text: 'nincs még erre a feladatra leadott válasz',status: 'skipped'});
-        console.log('No solution found in the database.');
+        debugLog('No solution found in the database.');
     }
 }
 
@@ -368,10 +351,10 @@ async function main_loop() {
             if (event.target.classList.contains('btn-danger')) { 
                 if (settings.isContributor && currentTask != null && hasAnswers(currentTask.answerFields) && taskFilledAnswers.toString() !== currentTask.answerFields.map(input => input.value).toString()) {
 
-                    console.log('lezárás clicked, syncing last task');
+                    debugLog('lezárás clicked, syncing last task');
                     let syncPromise = syncTaskWithDB(currentTask);
                     let finalSyncStatus = new taskStatus('utolsó feladat küldése...', 'processing');
-                    console.log('Sync promise:', syncPromise);
+                    debugLog('Sync promise:', syncPromise);
                     syncPromise.then(() => {
                         finalSyncStatus.succeed({"text": "utolsó feladat küldése kész"});
                     }).catch((error) => {
@@ -389,45 +372,45 @@ async function main_loop() {
     document.addEventListener('keydown', async function(event) {
         if (event.key.toLowerCase() === 'i') {
             if (currentTask != null) {
-                console.log('URL:', url);
-                console.log('Current task:', currentTask);
+                debugLog('URL:', url);
+                debugLog('Current task:', currentTask);
             }
         }
         else if (event.key.toLowerCase() === 's') {
             if (currentTask != null) {
-                console.log('Syncing task with DB (keybind clicked)... , ', hasAnswers(currentTask.answerFields) ? 'has answers' : 'no answers');
+                debugLog('Syncing task with DB (keybind clicked)... , ', hasAnswers(currentTask.answerFields) ? 'has answers' : 'no answers');
                 syncTaskWithDB(currentTask);
             }
         }
         else if(event.key.toLowerCase() === 'u') {
             if (currentTask != null) {
-                console.log('user ID:', getUserID());
+                debugLog('user ID:', getUserID());
             }
         }
         else if (event.ctrlKey && event.key.toLowerCase() === 'b') {
             if (document.getElementById('__input-blocker')) {
-                console.log('Unblocking user interaction...');
+                debugLog('Unblocking user interaction...');
                 unblockUserInteraction();
             } else {
-                console.log('Blocking user interaction...');
+                debugLog('Blocking user interaction...');
                 blockUserInteraction();
             }
         }
         else if (event.key.toLowerCase() === 'h') {
-            console.log('current task ID: ', await getTaskUniqueID());
+            debugLog('current task ID: ', await getTaskUniqueID());
         }
     });
     while (true) {
         if (currentTask) await detectUrlChange(); //if no task yet, we should immediately see if there is one
         
-        console.log('New URL, waiting for task...');
+        debugLog('New URL, waiting for task...');
         let getTaskStatus = new taskStatus('feladatra várakozás...', 'processing');
         await waitForTask();
-        console.log('task seen');
+        debugLog('task seen');
         getTaskStatus.set_text("feladat észlelve");
 
         if (settings.isContributor && currentTask != null && hasAnswers(currentTask.answerFields) && taskFilledAnswers.toString() !== currentTask.answerFields.map(input => input.value).toString()) {
-            console.log('New task found, syncing old one with DB...');
+            debugLog('New task found, syncing old one with DB...');
             let syncstatus = new taskStatus('előző feladat szinkronizálása...', 'processing');
             syncTaskWithDB(currentTask).then(() => {
                 syncstatus.succeed({"text": "előző feladat szinkronizálása kész"});
@@ -436,11 +419,11 @@ async function main_loop() {
             });
         }
         else {
-            console.log('not syncing prev. task because: ',)
-            !settings.isContributor ? console.log('user not a contributor') : 
-            currentTask == null ? console.log('no current task') : 
-            !hasAnswers(currentTask ? currentTask.answerFields : []) ? console.log('no answers') : 
-            taskFilledAnswers.toString() === currentTask.answerFields.map(input => input.value).toString() ? console.log('no changes from prev. filled answers') : console.log('WTF?');
+            debugLog('not syncing prev. task because: ',)
+            !settings.isContributor ? debugLog('user not a contributor') : 
+            currentTask == null ? debugLog('no current task') : 
+            !hasAnswers(currentTask ? currentTask.answerFields : []) ? debugLog('no answers') : 
+            taskFilledAnswers.toString() === currentTask.answerFields.map(input => input.value).toString() ? debugLog('no changes from prev. filled answers') : debugLog('WTF?');
 
         }
 
@@ -454,7 +437,7 @@ async function main_loop() {
         let taskFillStatus = new taskStatus('feladat kitöltése...', 'processing');
 
         if (hasAnswers(currentTask.answerFields)) {
-            console.log('Already has answers, skipping autofill...');
+            debugLog('Already has answers, skipping autofill...');
             taskFillStatus.fail({text: "már van valami beírva; kihagyva", color:'rgba(156, 39, 176, 0.85)'});
         }
         else if (settings.autoComplete) {
@@ -463,7 +446,7 @@ async function main_loop() {
             }
             catch (error) {
                 taskFillStatus.error({"text": "hiba a feladat lekérése során: " + error});
-                console.log('Error fetching task from DB:', error);
+                debugLog('Error fetching task from DB:', error);
             }
         }
         await updateSelectedAnswers(currentTask);
@@ -478,7 +461,7 @@ async function main_loop_wrapper() {
         try {
             let returncode = await main_loop();
             if (returncode === 504) {
-                console.log('timeout while connecting to server');
+                debugLog('timeout while connecting to server');
                 break;
             }
         } catch (error) {
