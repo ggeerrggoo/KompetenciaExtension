@@ -288,12 +288,9 @@ async function waitForTask() {
 }
 
 async function goToNextTask() {
-    const buttons = document.querySelectorAll('button.btn.btn-secondary.d-block');
-    if (buttons.length == 2) { // a prev. and next button should show up
-        buttons[buttons.length - 1].click();
-        window.scrollTo(0, document.body.scrollHeight); // ???
-        await new Promise(resolve => setTimeout(resolve, 50));
-        debugLog('went to next task');
+    let nextBtn = Array.from(document.querySelectorAll('button.btn.btn-secondary.d-block')).find(btn => btn.innerText.toLowerCase().includes('következő'));
+    if (nextBtn) {
+        nextBtn.click();
     }
 }
 
@@ -329,6 +326,50 @@ async function tryAutoFillTask(task, taskFillStatus, autoNext) {
     }
 }
 
+/**
+ * Duplicates a button, gives it new text/action, and places it next to the original.
+ * @param {string} selector - CSS selector to find the original button.
+ * @param {string} newText - The text for the new button.
+ * @param {Function} onClickCallback - The function to run when clicked.
+ */
+let customBtnId = 0;
+function addCustomButton(originalBtn, newText, description, onClickCallback) {
+    
+    if (originalBtn.parentElement.querySelector('.tekaku-btn')) return;
+    
+    const newBtn = originalBtn.cloneNode(true);
+
+    newBtn.innerText = newText;
+    newBtn.id = "tekaku-btn-" + customBtnId++;
+    newBtn.classList.add('tekaku-btn');
+
+    if(description) {
+        newBtn.title = description;
+    }
+    
+    newBtn.removeAttribute('onclick');
+
+    newBtn.addEventListener('click', (e) => {
+        e.preventDefault(); // Stop default form submissions/navigation
+        e.stopPropagation(); // Stop page scripts from seeing the click
+        onClickCallback(e);
+    });
+
+    originalBtn.insertAdjacentElement('beforebegin', newBtn);
+    newBtn.style.marginLeft = "10px"; 
+}
+
+let cancelTaskSync = false;
+function copyNextButton() {
+    let nextBtn = Array.from(document.querySelectorAll('button.btn.btn-secondary.d-block')).find(btn => btn.innerText.toLowerCase().includes('következő'));
+    if (!nextBtn) return;
+    addCustomButton(nextBtn, 'továbblépés válasz küldése nélkül', 'következő feladatra lép, de nem menti a TeKaKu a választ (akkor használd, ha nem vagy magabiztos ebben a feladatban!)', 
+        async () => {
+        cancelTaskSync = true;
+        await goToNextTask();
+    });
+}
+
 async function main_loop() {
     
     await initialize();
@@ -349,7 +390,7 @@ async function main_loop() {
             updateSelectedAnswers(currentTask, event);
             // a 'lezárás' gomb ilyen, ekkor elküldjük az utolsó feladatot, mivel nem lesz következő amit érzékelünk
             if (event.target.classList.contains('btn-danger')) { 
-                if (settings.isContributor && currentTask != null && hasAnswers(currentTask.answerFields) && taskFilledAnswers.toString() !== currentTask.answerFields.map(input => input.value).toString()) {
+                if (settings.isContributor && !cancelTaskSync && currentTask != null && hasAnswers(currentTask.answerFields) && taskFilledAnswers.toString() !== currentTask.answerFields.map(input => input.value).toString()) {
 
                     debugLog('lezárás clicked, syncing last task');
                     let syncPromise = syncTaskWithDB(currentTask);
@@ -409,7 +450,7 @@ async function main_loop() {
         debugLog('task seen');
         getTaskStatus.set_text("feladat észlelve");
 
-        if (settings.isContributor && currentTask != null && hasAnswers(currentTask.answerFields) && taskFilledAnswers.toString() !== currentTask.answerFields.map(input => input.value).toString()) {
+        if (settings.isContributor && !cancelTaskSync && currentTask != null && hasAnswers(currentTask.answerFields) && taskFilledAnswers.toString() !== currentTask.answerFields.map(input => input.value).toString()) {
             debugLog('New task found, syncing old one with DB...');
             let syncstatus = new taskStatus('előző feladat szinkronizálása...', 'processing');
             syncTaskWithDB(currentTask).then(() => {
@@ -433,6 +474,11 @@ async function main_loop() {
         getTaskStatus.succeed({"text": "feladat feldolgozva"});
         url = window.location.href;
         last_url = url;
+
+        if (settings.isContributor){
+            cancelTaskSync = false;
+            copyNextButton();
+        }
 
         let taskFillStatus = new taskStatus('feladat kitöltése...', 'processing');
 
