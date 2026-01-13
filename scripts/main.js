@@ -20,6 +20,7 @@ function fetchTask(url, options) {
 async function fetchTaskSolution(task) {
     let taskData = {
         ID: task.uniqueID,
+        fieldCount: task.answerFields.length
     };
     let user = {
         name: settings.name,
@@ -87,6 +88,7 @@ async function syncTaskWithDB(task) {
     return;
 }
 
+let settings = {};
 function loadSettings() {
     return new Promise((resolve) => {
         chrome.storage.sync.get({
@@ -95,13 +97,15 @@ function loadSettings() {
             votepercentage: 0.8,
             contributer: true,
             url: 'https://tekaku.hu/',
-            autoComplete: true
+            autoComplete: true,
+            isSetupComplete: false
         }, function(items) {
             settings.name = items.name;
             settings.minvotes = items.minvotes;
             settings.votepercentage = items.votepercentage * 100.0;
             settings.isContributor = items.contributer;
             settings.url = items.url;
+            settings.isSetupComplete = items.isSetupComplete;
             if (settings.url.includes("strong-finals.gl.at.ply.gg:36859")) { // update old playit URL
                 console.warn('old playit URL detected');
                 let oldUrlIndicator = new taskStatus('Régi URL van beállítva, ha ez nem direkt van, frissítsd "https://tekaku.hu/"-ra a beállítások -> advanced menüben', 'error');
@@ -232,8 +236,6 @@ async function sendRequestToWebSocket(request) {
     });
 }
 
-var settings = {};
-
 async function initialize() {
     //load stored settings on startup
     let settings_task = new taskStatus('beállítások betöltése');
@@ -242,6 +244,19 @@ async function initialize() {
         settings_task.succeed();
     } catch (error) {
         settings_task.error({"text": "hiba a beállítások betöltésekor: " + error});
+        throw error;
+    }
+
+    if(!settings.isSetupComplete) {
+        let setupStatus = new taskStatus('setupTaskStatus');
+        setupStatus.error({text: `Kérlek fejezd be a beállításokat a <a href="#" id="open-options-btn" target="_blank">kiegészítő beállítások menüben</a>!`, stayTime: -1});
+
+        document.addEventListener('click', function(e) {
+    if (e.target && e.target.id === 'open-options-btn') {
+        e.preventDefault();
+        chrome.runtime.sendMessage({ action: "open_options_page" });
+    }
+});
     }
 
     // Connect to background and retry on failure with increasing timeouts

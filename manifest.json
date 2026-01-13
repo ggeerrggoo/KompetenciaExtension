@@ -18,7 +18,11 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["scripts/*.js", "task_logic/*.js"],
+      "resources": [
+        "scripts/*.js", 
+        "task_logic/*.js",
+        "setup_files/*.html"
+      ],
       "matches": ["*://*.tehetsegkapu.hu/*", "*://tehetsegkapu.hu/*"]
     }
   ],
@@ -27,5 +31,12 @@
   ],
   "host_permissions": [
     "https://tekaku.hu/*"
-  ]
+  ],
+  "options_ui": {
+    "page": "settings_files/options.html",
+    "open_in_tab": true
+  },
+  "background": {
+    "service_worker": "background_worker/background.js"
+  }
 }
