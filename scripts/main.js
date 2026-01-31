@@ -20,6 +20,7 @@ function fetchTask(url, options) {
 async function fetchTaskSolution(task) {
     let taskData = {
         ID: task.uniqueID,
+        fieldCount: task.answerFields.length
     };
     let user = {
         name: settings.name,
@@ -294,9 +295,27 @@ async function goToNextTask() {
     }
 }
 
+function aggregateQueryResults(queryResultNew) {
+    if (!queryResultNew || !Array.isArray(queryResultNew) || queryResultNew.length === 0) {
+        return null;
+    }
+
+    const answers = queryResultNew.map(item => item.answer);
+    const totalVotes = Math.max(...queryResultNew.map(item => item.totalVotes));
+    const votes = Math.min(...queryResultNew.map(item => item.votes));
+
+    return {
+        totalVotes: totalVotes,
+        votes: votes,
+        answer: JSON.stringify(answers)
+    };
+}
+
 async function tryAutoFillTask(task, taskFillStatus, autoNext) {
     taskFillStatus.set_text('válasz kérése szervertől...');
-    const queryResult = await fetchTaskSolution(task);
+    const queryResultNew = await fetchTaskSolution(task); 
+    const queryResult = aggregateQueryResults(queryResultNew);
+
     if (queryResult) {
         debugLog('Query result:', queryResult);
         await loadSettings();
