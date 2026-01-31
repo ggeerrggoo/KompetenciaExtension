@@ -1,44 +1,33 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8"> 
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 10px;
+            width: 250px;
+        }
+        h3 {
+            margin-top: 0;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #0078d4;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            width: 100%;
+        }
+        button:hover {
+            background-color: #106ebe;
+        }
+    </style>
 </head>
 <body>
-    <h3>Settings</h3><br>
-
-    <label for="name" 
-        title="Ez fog megjelenni a toplistan ha sok feladatot csinálsz meg az elsők között.">
-        Name(?):
-    </label>
-    <input type="text" id="name" name="name"><br><br>
-
-    
-    <label for ="minvotes"
-        title = "Ez a minimum szavazat szám ami után agy feladatot automatikusan kitölt a rendszer.
-Ha ennél kevesebb válasz áll rendelkezésünkre az adott feladatra, akkor nem fogjuk kitölteni.">
-    Minimum Votes(?):</label>
-    <input type="number" id="minvotes" name="minvotes"><br><br>
-
-    <label for ="votepercentage"
-        title = "Akkor fogja kitölteni a feladatot, ha a rendelkezésünkre álló válaszok legalább ennyi százaléka ugyanaz.">
-    Vote Percentage(?):</label> 
-    <input type="number" id="votepercentage" name="votepercentage"><br><br>
-
-    <div title = "Ha ez ki van kapcsolva akkor nem fogja elmanteni a megoldásodat.">
-        Contributor:<input type="checkbox" id="contributer" name="contributer"><br>
-    </div>
-    Auto complete:<input type="checkbox" id="auto-complete" name="auto-complete"><br>
-    <button id="save">Save</button><br>
-    <button id="advancedbutton">Advanced Settings</button><br>
-    <div id = "advanced" style="display:none;">
-        
-        <h3>Advanced Settings</h3>
-        
-        <label for="url">URL:</label>
-        <input type="text" id="url" name="url"><br>
-        
-        <script src="popup.js"></script>
-    </div>
-    <div id = "status"></div>
+    <h3>TeKaKu</h3>
+    <button id="go-to-options">Beállítások Megnyitása</button>
+    <script src="popup.js"></script>
 </body>
 </html>
