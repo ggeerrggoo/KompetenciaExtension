@@ -392,15 +392,18 @@ function addCustomButton(originalBtn, newText, description, onClickCallback) {
     newBtn.style.marginLeft = "10px"; 
 }
 
+async function goToNextTaskWithoutSaving() {
+    cancelTaskSync = true;
+    await goToNextTask();
+}
+
 let cancelTaskSync = false;
 function copyNextButton() {
     let nextBtn = Array.from(document.querySelectorAll('button.btn.btn-secondary.d-block')).find(btn => btn.innerText.toLowerCase().includes('következő'));
     if (!nextBtn) return;
     addCustomButton(nextBtn, 'továbblépés válasz küldése nélkül', 'következő feladatra lép, de nem menti a TeKaKu a választ (akkor használd, ha nem vagy magabiztos ebben a feladatban!)', 
-        async () => {
-        cancelTaskSync = true;
-        await goToNextTask();
-    });
+        goToNextTaskWithoutSaving
+    );
 }
 
 async function main_loop() {
@@ -472,6 +475,12 @@ async function main_loop() {
         }
         else if (event.key.toLowerCase() === 'h') {
             debugLog('current task ID: ', await getTaskUniqueID());
+        }
+        else if (event.ctrlKey && event.key.toLowerCase() === 'm') {
+            goToNextTaskWithoutSaving();
+        }
+        else if (event.ctrlKey && event.key.toLowerCase() === 'q') {
+            goToNextTask();
         }
     });
     while (true) {
