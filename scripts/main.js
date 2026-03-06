@@ -461,7 +461,7 @@ async function main_loop() {
         }
         else if(event.key.toLowerCase() === 'u') {
             if (currentTask != null) {
-                debugLog('user ID:', getUserID());
+                debugLog('user ID:',await  getUserID());
             }
         }
         else if (event.ctrlKey && event.key.toLowerCase() === 'b') {

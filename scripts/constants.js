@@ -41,4 +41,4 @@ export const maxImageHashSize = 20;
  */
 export const autoNext = false;
 
-export const _DEBUG = true;
+export const _DEBUG = false;
