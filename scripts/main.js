@@ -92,15 +92,7 @@ async function syncTaskWithDB(task) {
 let settings = {};
 function loadSettings() {
     return new Promise((resolve) => {
-        chrome.storage.sync.get({
-            name: defaultOptions.name,
-            minvotes: defaultOptions.minvotes,
-            votepercentage: defaultOptions.votepercentage,
-            contributer: defaultOptions.contributer,
-            url: defaultOptions.url,
-            autoComplete: defaultOptions.autoComplete,
-            isSetupComplete: defaultOptions.isSetupComplete
-        }, function(items) {
+        chrome.storage.sync.get(defaultOptions, function(items) {
             settings.name = items.name;
             settings.minvotes = items.minvotes;
             settings.votepercentage = items.votepercentage * 100.0;

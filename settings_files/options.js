@@ -10,12 +10,12 @@ function saveOptions() {
         isSetupComplete: true
     };
     
-    if(options.votepercentage > 1.0 || options.votepercentage < 0.0) {
-        alert("Vote percent must be between 0 and 100");
+    if(options.votepercentage > 1.0 || options.votepercentage < 0.51) {
+        alert("az azonos válaszok elfogadásához szükséges szavazati aránynak 51% és 100% között kell lennie");
         return;
     }
     if(options.minvotes <= 0) {
-        alert("Minimum votes must be greater than 0");
+        alert("a minimum szavazatok számának pozitív egésznek kell lennie");
         return;
     }
     if(options.url.endsWith("/") == false) 
@@ -52,27 +52,20 @@ function deleteSetupReminder() {
 }
 
 function restoreOptions() {
-    chrome.storage.sync.get({
-        minvotes: defaultOptions.minvotes,
-        votepercentage: defaultOptions.votepercentage,
-        contributer: defaultOptions.contributer,
-        url: defaultOptions.url,
-        autoComplete: defaultOptions.autoComplete,
-        isSetupComplete: defaultOptions.isSetupComplete
-    }, function(items) {
+    chrome.storage.sync.get(defaultOptions, function(items) {
         if(items.minvotes == 0) {
-            document.getElementById('minvotes').value = 5;
+            document.getElementById('minvotes').value = defaultOptions.minvotes;
         }
         else document.getElementById('minvotes').value = items.minvotes;
 
         if(items.votepercentage == 0.0) {
-            document.getElementById('votepercentage').value = 80.0;
+            document.getElementById('votepercentage').value = defaultOptions.votepercentage * 100.0;
         }
         else document.getElementById('votepercentage').value = items.votepercentage * 100.0;
 
         document.getElementById('contributer').checked = items.contributer;
         if(items.url == '') {
-            document.getElementById('url').value = 'https://tekaku.hu/';
+            document.getElementById('url').value = defaultOptions.url;
         }
         else document.getElementById('url').value = items.url;
         document.getElementById('auto-complete').checked = items.autoComplete;
@@ -125,15 +118,15 @@ function showAdvanced() {
 }
 
 function resetDefaultOptions() {
-    chrome.storage.sync.set({
-        minvotes: 5,
-        votepercentage: 0.8,
-        contributer: false,
-        url: 'https://tekaku.hu/',
-        autoComplete: true,
-        isSetupComplete: false
+    chrome.storage.sync.set(defaultOptions, function() {
+        // Update status or reload page
+        const status = document.getElementById('status');
+        status.textContent = 'Alapértelmezett beállítások visszaállítva.';
+        setTimeout(function() {
+            status.textContent = '';
+            window.location.reload();
+        }, 750);
     });
-    window.location.reload();
 }
 
 function setNotSavedStatus() {
