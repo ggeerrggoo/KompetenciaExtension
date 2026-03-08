@@ -1,4 +1,5 @@
 /*global chrome*/
+import { defaultOptions } from '../scripts/constants.js';
 function saveOptions() {
     const options = {
         minvotes: document.getElementById('minvotes').value,
@@ -16,14 +17,6 @@ function saveOptions() {
     if(options.minvotes <= 0) {
         alert("Minimum votes must be greater than 0");
         return;
-    }
-    if (options.url.includes("http://")) { 
-        console.warn('http:// in URL detected, removing it');
-        //options.url = options.url.replace("http://", "https://");
-    }
-    if (options.url.includes("https://") == false) { 
-        console.warn('No http:// or https:// in URL detected, adding https://');
-        options.url = "https://" + options.url;
     }
     if(options.url.endsWith("/") == false) 
         options.url = options.url + "/";
@@ -60,12 +53,12 @@ function deleteSetupReminder() {
 
 function restoreOptions() {
     chrome.storage.sync.get({
-        minvotes: 0,
-        votepercentage: 0.0,
-        contributer: true,
-        url: '',
-        autoComplete: true,
-        isSetupComplete: false
+        minvotes: defaultOptions.minvotes,
+        votepercentage: defaultOptions.votepercentage,
+        contributer: defaultOptions.contributer,
+        url: defaultOptions.url,
+        autoComplete: defaultOptions.autoComplete,
+        isSetupComplete: defaultOptions.isSetupComplete
     }, function(items) {
         if(items.minvotes == 0) {
             document.getElementById('minvotes').value = 5;

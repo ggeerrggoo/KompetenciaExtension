@@ -4,6 +4,7 @@ import { getUserID, hasAnswers, isThereTask, getTaskUniqueID, updateSelectedAnsw
 import { writeAnswers} from '../task_logic/write_to_task.js';
 import { autoNext, _DEBUG } from './constants.js';
 import { blockUserInteraction, unblockUserInteraction, debugLog} from './utils.js';
+import { defaultOptions } from './constants.js';
 
 function fetchTask(url, options) {
     return fetch(url, options).catch(error => {
@@ -92,13 +93,13 @@ let settings = {};
 function loadSettings() {
     return new Promise((resolve) => {
         chrome.storage.sync.get({
-            name: '',
-            minvotes: 5,
-            votepercentage: 0.8,
-            contributer: true,
-            url: 'https://tekaku.hu/',
-            autoComplete: true,
-            isSetupComplete: false
+            name: defaultOptions.name,
+            minvotes: defaultOptions.minvotes,
+            votepercentage: defaultOptions.votepercentage,
+            contributer: defaultOptions.contributer,
+            url: defaultOptions.url,
+            autoComplete: defaultOptions.autoComplete,
+            isSetupComplete: defaultOptions.isSetupComplete
         }, function(items) {
             settings.name = items.name;
             settings.minvotes = items.minvotes;
@@ -106,10 +107,6 @@ function loadSettings() {
             settings.isContributor = items.contributer;
             settings.url = items.url;
             settings.isSetupComplete = items.isSetupComplete;
-            if (settings.url.includes("strong-finals.gl.at.ply.gg:36859")) { // update old playit URL
-                console.warn('old playit URL detected');
-                let oldUrlIndicator = new taskStatus('Régi URL van beállítva, ha ez nem direkt van, frissítsd "https://tekaku.hu/"-ra a beállítások -> advanced menüben', 'error');
-            }
             settings.autoComplete = items.autoComplete;
             resolve(items);
         });
@@ -249,7 +246,7 @@ async function initialize() {
 
     if(!settings.isSetupComplete) {
         let setupStatus = new taskStatus('setupTaskStatus');
-        setupStatus.error({text: `Kérlek fejezd be a beállításokat a <a href="#" id="open-options-btn" target="_blank">kiegészítő beállítások menüben</a>!`, stayTime: -1});
+        setupStatus.error({text: `Kérlek fejezd be a beállításokat a <a href="#" id="open-options-btn" target="_blank">beállítások menüben</a> és utána frissítsd az oldalt!`, stayTime: -1});
 
         document.addEventListener('click', function(e) {
     if (e.target && e.target.id === 'open-options-btn') {

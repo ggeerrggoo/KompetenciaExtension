@@ -29,6 +29,16 @@ export const taskFieldSelectors = {
     }
 };
 
+export const defaultOptions = {
+    name: '',
+    minvotes: 5,
+    votepercentage: 0.8,
+    contributer: false, 
+    url: 'https://tekaku.hu/',
+    autoComplete: true,
+    isSetupComplete: false
+};
+
 /** 
  * The maximum size (in pixels) to which images are resized before hashing.
  * @type {number}
