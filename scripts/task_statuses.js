@@ -1,5 +1,5 @@
 
-import { repositionTaskStatuses, debugLog} from './utils.js';
+import { repositionTaskStatuses, debugLog, isUIHidden} from './utils.js';
 
 export class taskStatus {
     static taskStatusIndex = 0;
@@ -9,6 +9,10 @@ export class taskStatus {
         this.state = state;
         this.id = `__tk_task_${++taskStatus.taskStatusIndex}`;
         this.element = this.createElement();
+        // Apply hidden state if UI is hidden
+        if (isUIHidden()) {
+            this.element.style.display = 'none';
+        }
         document.body.appendChild(this.element);
         repositionTaskStatuses();
         if (this.state === 'error') {

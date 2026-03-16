@@ -1,8 +1,34 @@
 import { maxImageHashSize, taskFieldSelectors, _DEBUG } from './constants.js';   
 //utility funcs NOT requiring DOM access:
-export { debugLog, dedupeByKey, hashSHA256, waitForImageLoad, waitForLoadingScreen}
+export { debugLog, dedupeByKey, hashSHA256, waitForImageLoad, waitForLoadingScreen, fetchMinSettings, isUIHidden, getInstallationKey}
 
 const debugLog = _DEBUG ? console.log.bind(console) : function(){};
+
+// Global state for UI visibility
+let __uiHidden = false;
+
+function isUIHidden() {
+    return __uiHidden;
+}
+
+/**
+ * Get the unique installation key for this extension installation
+ * @returns {Promise<string>} The installation key, or a generated fallback if not found
+ */
+function getInstallationKey() {
+    return new Promise((resolve) => {
+        chrome.storage.local.get({ installationKey: null }, (items) => {
+            if (items.installationKey) {
+                resolve(items.installationKey);
+            } else {
+                // Fallback: generate a new key if not found
+                const fallbackKey = `install_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 15)}`;
+                chrome.storage.local.set({ installationKey: fallbackKey });
+                resolve(fallbackKey);
+            }
+        });
+    });
+}
 
 function dedupeByKey(items, key) {
     const seen = new Set();
@@ -125,7 +151,7 @@ async function waitForLoadingScreen() {
 
 //taskStatuses utils
 
-export { repositionTaskStatuses, scaleTaskStatuses }
+export { repositionTaskStatuses, scaleTaskStatuses, toggleTaskStatusesVisibility }
 
 function repositionTaskStatuses(scale = -1) {
     try {
@@ -158,5 +184,64 @@ function scaleTaskStatuses(scale) {
         repositionTaskStatuses(scale);
     } catch (e) {
         debugLog('scaleTaskStatuses error', e);
+    }
+}
+
+/**
+ * Toggle visibility of task statuses and all custom buttons
+ * Uses display:none to hide, not delete
+ */
+function toggleTaskStatusesVisibility() {
+    try {
+        // Toggle the global state
+        __uiHidden = !__uiHidden;
+        
+        // Toggle task statuses
+        const taskStatuses = document.querySelectorAll('[id^="__tk_task_"]');
+        taskStatuses.forEach((status) => {
+            status.style.display = __uiHidden ? 'none' : '';
+        });
+        
+        // Toggle all custom buttons created with addCustomButton (data-tekaku-btn attribute)
+        const customBtns = document.querySelectorAll('[data-tekaku-btn="true"]');
+        customBtns.forEach((btn) => {
+            btn.style.display = __uiHidden ? 'none' : '';
+        });
+        
+        debugLog('Task statuses and custom buttons visibility toggled. Hidden:', __uiHidden);
+    } catch (e) {
+        debugLog('toggleTaskStatusesVisibility failed', e);
+    }
+}
+
+/**
+ * Fetch minimum settings from the API
+ * @param {string} url - The base server URL (should include trailing slash)
+ * @returns {Promise<{minvotes: number, votepercentage: number}|null>} The min settings or null if fetch fails
+ */
+async function fetchMinSettings(url) {
+    try {
+        const minSettingsUrl = url + 'minsettings';
+        const response = await fetch(minSettingsUrl, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            debugLog('Min settings fetched successfully:', data);
+            return {
+                minvotes: parseInt(data.minvotes),
+                votepercentage: parseFloat(data.votepercentage)
+            };
+        } else {
+            debugLog('Failed to fetch min settings:', response.status);
+            return null;
+        }
+    } catch (error) {
+        debugLog('Error fetching min settings:', error);
+        return null;
     }
 }

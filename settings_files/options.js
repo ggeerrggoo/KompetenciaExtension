@@ -1,5 +1,65 @@
 /*global chrome*/
+
+// Store API minimum values
+let apiMinValues = {
+    minvotes: 0,
+    votepercentage: 0.0
+};
+
+/**
+ * Fetch minimum settings from the API based on the configured URL
+ */
+async function loadApiMinValues() {
+    return new Promise((resolve) => {
+        chrome.storage.sync.get({
+            url: 'https://tekaku.hu/'
+        }, async function(items) {
+            try {
+                const minSettingsUrl = items.url.endsWith('/') ? items.url : items.url + '/';
+                const response = await fetch(minSettingsUrl + 'minsettings', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    apiMinValues.minvotes = parseInt(data.minvotes) || 0;
+                    apiMinValues.votepercentage = parseFloat(data.votepercentage) || 0.0;
+                    console.log('Min settings fetched successfully:', apiMinValues);
+                }
+            } catch (error) {
+                console.log('Error fetching min settings:', error);
+            }
+            updateMinimumDisplay();
+            resolve();
+        });
+    });
+}
+
+/**
+ * Update the display of minimum values in the UI
+ */
+function updateMinimumDisplay() {
+    const minvotesDisplay = document.getElementById('minvotes-minimum');
+    const votepercentageDisplay = document.getElementById('votepercentage-minimum');
+    
+    if (minvotesDisplay && apiMinValues.minvotes > 0) {
+        minvotesDisplay.textContent = `Minimum érték: ${apiMinValues.minvotes}`;
+    } else if (minvotesDisplay) {
+        minvotesDisplay.textContent = '';
+    }
+    
+    if (votepercentageDisplay && apiMinValues.votepercentage > 0) {
+        votepercentageDisplay.textContent = `Minimum érték: ${(apiMinValues.votepercentage * 100).toFixed(1)}%`;
+    } else if (votepercentageDisplay) {
+        votepercentageDisplay.textContent = '';
+    }
+}
+
 function saveOptions() {
+
     const options = {
         minvotes: document.getElementById('minvotes').value,
         votepercentage: document.getElementById('votepercentage').value/100.0,
@@ -15,6 +75,15 @@ function saveOptions() {
     }
     if(options.minvotes <= 0) {
         alert("Minimum votes must be greater than 0");
+        return;
+    }
+    // Validate against API minimums
+    if(apiMinValues.minvotes > 0 && options.minvotes < apiMinValues.minvotes) {
+        alert(`A minimum leadott válaszok száma nem lehet kevesebb, mint ${apiMinValues.minvotes}`);
+        return;
+    }
+    if(apiMinValues.votepercentage > 0 && options.votepercentage < apiMinValues.votepercentage) {
+        alert(`Az azonos válasz aránya nem lehet kevesebb, mint ${(apiMinValues.votepercentage * 100).toFixed(1)}%`);
         return;
     }
     if (options.url.includes("http://")) { 
@@ -171,7 +240,10 @@ document.addEventListener('keydown', function(event) {
     }
 });
 
-document.addEventListener('DOMContentLoaded', restoreOptions);
+document.addEventListener('DOMContentLoaded', async function() {
+    await loadApiMinValues();
+    restoreOptions();
+});
 document.getElementById('save').addEventListener('click', saveOptions);
 document.getElementById('advancedbutton').addEventListener('click', showAdvanced);
 document.getElementById('reset').addEventListener('click', resetDefaultOptions);
@@ -182,3 +254,8 @@ window.addEventListener('beforeunload', (event) => {
         event.preventDefault();
     }
 });
+// Initial load
+(async function() {
+    await loadApiMinValues();
+    restoreOptions();
+})();

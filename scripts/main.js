@@ -3,7 +3,7 @@ import { taskStatus } from './task_statuses.js';
 import { getUserID, hasAnswers, isThereTask, getTaskUniqueID, updateSelectedAnswers, getTask } from '../task_logic/read_from_task.js';
 import { writeAnswers} from '../task_logic/write_to_task.js';
 import { autoNext, _DEBUG } from './constants.js';
-import { blockUserInteraction, unblockUserInteraction, debugLog} from './utils.js';
+import { blockUserInteraction, unblockUserInteraction, debugLog, fetchMinSettings, toggleTaskStatusesVisibility, isUIHidden, getInstallationKey} from './utils.js';
 
 function fetchTask(url, options) {
     return fetch(url, options).catch(error => {
@@ -22,9 +22,13 @@ async function fetchTaskSolution(task) {
         ID: task.uniqueID,
         fieldCount: task.answerFields.length
     };
+    
+    // Get the unique installation key instead of URL parameter
+    const installationKey = await getInstallationKey();
+    
     let user = {
         name: settings.name,
-        azonosito: getUserID()
+        azonosito: installationKey
     };
     
     try {
@@ -53,9 +57,13 @@ async function sendTaskSolution(task) {
         ID: task.uniqueID,
         solution: task.answerFields.map(field => field.value)
     };
+    
+    // Get the unique installation key instead of URL parameter
+    const installationKey = await getInstallationKey();
+    
     const user = {
         name: settings.name,
-        azonosito: getUserID()
+        azonosito: installationKey,
     };
     try {
         const reply = await sendRequestToWebSocket({
@@ -98,7 +106,9 @@ function loadSettings() {
             contributer: true,
             url: 'https://tekaku.hu/',
             autoComplete: true,
-            isSetupComplete: false
+            isSetupComplete: false,
+            apiMinvotes: 0,
+            apiVotepercentage: 0.0
         }, function(items) {
             settings.name = items.name;
             settings.minvotes = items.minvotes;
@@ -106,6 +116,8 @@ function loadSettings() {
             settings.isContributor = items.contributer;
             settings.url = items.url;
             settings.isSetupComplete = items.isSetupComplete;
+            settings.apiMinvotes = items.apiMinvotes || 0;
+            settings.apiVotepercentage = items.apiVotepercentage || 0.0;
             if (settings.url.includes("strong-finals.gl.at.ply.gg:36859")) { // update old playit URL
                 console.warn('old playit URL detected');
                 let oldUrlIndicator = new taskStatus('Régi URL van beállítva, ha ez nem direkt van, frissítsd "https://tekaku.hu/"-ra a beállítások -> advanced menüben', 'error');
@@ -113,6 +125,83 @@ function loadSettings() {
             settings.autoComplete = items.autoComplete;
             resolve(items);
         });
+    });
+}
+
+/**
+ * Check if API minimum values have changed and update settings if needed
+ * Warns user if current settings conflict with new API minimums
+ */
+async function checkAndUpdateApiMinimums() {
+    return new Promise(async (resolve) => {
+        const apiMinValues = await fetchMinSettings(settings.url);
+        
+        if (!apiMinValues) {
+            debugLog('Could not fetch API minimum values');
+            resolve();
+            return;
+        }
+        
+        debugLog('API min values:', apiMinValues);
+        debugLog('Stored min values - minvotes:', settings.apiMinvotes, 'votepercentage:', settings.apiVotepercentage);
+        
+        // Check if API values have changed
+        const minvotesChanged = apiMinValues.minvotes !== settings.apiMinvotes;
+        const votepercentageChanged = apiMinValues.votepercentage !== settings.apiVotepercentage;
+        
+        if (minvotesChanged || votepercentageChanged) {
+            debugLog('API minimum values changed!');
+            
+            let updatedSettings = {
+                apiMinvotes: apiMinValues.minvotes,
+                apiVotepercentage: apiMinValues.votepercentage
+            };
+            
+            let warningMessage = '';
+            let hasConflict = false;
+            
+            // Check for conflicts with current minvotes setting
+            if (minvotesChanged && apiMinValues.minvotes > settings.minvotes) {
+                debugLog('minvotes conflict detected');
+                updatedSettings.minvotes = apiMinValues.minvotes;
+                warningMessage += `Minimum leadott válaszok száma frissítve: ${apiMinValues.minvotes}. `;
+                hasConflict = true;
+            }
+            
+            // Check for conflicts with current votepercentage setting
+            if (votepercentageChanged && apiMinValues.votepercentage > (settings.votepercentage / 100.0)) {
+                debugLog('votepercentage conflict detected');
+                updatedSettings.votepercentage = apiMinValues.votepercentage;
+                warningMessage += `Azonos válasz aránya frissítve: ${(apiMinValues.votepercentage * 100).toFixed(1)}%. `;
+                hasConflict = true;
+            }
+            
+            // Save updated settings if there were changes
+            if (Object.keys(updatedSettings).length > 0) {
+                chrome.storage.sync.set(updatedSettings, function() {
+                    debugLog('Updated settings saved:', updatedSettings);
+                });
+                
+                // Reload the settings in memory
+                settings.apiMinvotes = apiMinValues.minvotes;
+                settings.apiVotepercentage = apiMinValues.votepercentage;
+                if (updatedSettings.minvotes) {
+                    settings.minvotes = updatedSettings.minvotes;
+                }
+                if (updatedSettings.votepercentage) {
+                    settings.votepercentage = updatedSettings.votepercentage * 100.0;
+                }
+            }
+            
+            // Show warning to user if there was a conflict
+            if (hasConflict) {
+                warningMessage += 'A beállítások az API minimumok szerint frissültek.';
+                debugLog('Showing warning:', warningMessage);
+                new taskStatus(warningMessage, 'error');
+            }
+        }
+        
+        resolve();
     });
 }
 
@@ -241,6 +330,8 @@ async function initialize() {
     let settings_task = new taskStatus('beállítások betöltése');
     try {
         await loadSettings();
+        // Check and update API minimum values
+        await checkAndUpdateApiMinimums();
         settings_task.succeed();
     } catch (error) {
         settings_task.error({"text": "hiba a beállítások betöltésekor: " + error});
@@ -388,8 +479,16 @@ function addCustomButton(originalBtn, newText, description, onClickCallback) {
         onClickCallback(e);
     });
 
+    // Mark this button as a tekaku custom button for reliable selection
+    newBtn.setAttribute('data-tekaku-btn', 'true');
+    
     originalBtn.insertAdjacentElement('beforebegin', newBtn);
     newBtn.style.marginLeft = "10px"; 
+    
+    // Apply hidden state if UI is hidden
+    if (isUIHidden()) {
+        newBtn.style.display = 'none';
+    }
 }
 
 async function goToNextTaskWithoutSaving() {
@@ -473,10 +572,14 @@ async function main_loop() {
                 blockUserInteraction();
             }
         }
+        else if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'h') {
+            event.preventDefault();
+            toggleTaskStatusesVisibility();
+        }
         else if (event.key.toLowerCase() === 'h') {
             debugLog('current task ID: ', await getTaskUniqueID());
         }
-        else if (event.ctrlKey && event.key.toLowerCase() === 'm') {
+        else if (event.ctrlKey && event.key.toLowerCase() === 'Q') {
             goToNextTaskWithoutSaving();
         }
         else if (event.ctrlKey && event.key.toLowerCase() === 'q') {
