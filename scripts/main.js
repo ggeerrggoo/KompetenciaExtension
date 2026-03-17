@@ -130,76 +130,71 @@ function loadSettings() {
  * Warns user if current settings conflict with new API minimums
  */
 async function checkAndUpdateApiMinimums() {
-    return new Promise(async (resolve) => {
-        const apiMinValues = await fetchMinSettings(settings.url);
+    const apiMinValues = await fetchMinSettings(settings.url);
+    
+    if (!apiMinValues) {
+        debugLog('Could not fetch API minimum values');
+        return;
+    }
+    
+    debugLog('API min values:', apiMinValues);
+    debugLog('Stored min values - minvotes:', settings.apiMinvotes, 'votepercentage:', settings.apiVotepercentage);
+    
+    // Check if API values have changed
+    const minvotesChanged = apiMinValues.minvotes !== settings.apiMinvotes;
+    const votepercentageChanged = apiMinValues.votepercentage !== settings.apiVotepercentage;
+    
+    if (minvotesChanged || votepercentageChanged) {
+        debugLog('API minimum values changed!');
         
-        if (!apiMinValues) {
-            debugLog('Could not fetch API minimum values');
-            resolve();
-            return;
+        let updatedSettings = {
+            apiMinvotes: apiMinValues.minvotes,
+            apiVotepercentage: apiMinValues.votepercentage
+        };
+        
+        let warningMessage = '';
+        let hasConflict = false;
+        
+        // Check for conflicts with current minvotes setting
+        if (minvotesChanged && apiMinValues.minvotes > settings.minvotes) {
+            debugLog('minvotes conflict detected');
+            updatedSettings.minvotes = apiMinValues.minvotes;
+            warningMessage += `Minimum leadott válaszok száma frissítve: ${apiMinValues.minvotes}. `;
+            hasConflict = true;
         }
         
-        debugLog('API min values:', apiMinValues);
-        debugLog('Stored min values - minvotes:', settings.apiMinvotes, 'votepercentage:', settings.apiVotepercentage);
+        // Check for conflicts with current votepercentage setting
+        if (votepercentageChanged && apiMinValues.votepercentage > (settings.votepercentage / 100.0)) {
+            debugLog('votepercentage conflict detected');
+            updatedSettings.votepercentage = apiMinValues.votepercentage;
+            warningMessage += `Azonos válasz aránya frissítve: ${(apiMinValues.votepercentage * 100).toFixed(1)}%. `;
+            hasConflict = true;
+        }
         
-        // Check if API values have changed
-        const minvotesChanged = apiMinValues.minvotes !== settings.apiMinvotes;
-        const votepercentageChanged = apiMinValues.votepercentage !== settings.apiVotepercentage;
-        
-        if (minvotesChanged || votepercentageChanged) {
-            debugLog('API minimum values changed!');
+        // Save updated settings if there were changes
+        if (Object.keys(updatedSettings).length > 0) {
+            chrome.storage.sync.set(updatedSettings, function() {
+                debugLog('Updated settings saved:', updatedSettings);
+            });
             
-            let updatedSettings = {
-                apiMinvotes: apiMinValues.minvotes,
-                apiVotepercentage: apiMinValues.votepercentage
-            };
-            
-            let warningMessage = '';
-            let hasConflict = false;
-            
-            // Check for conflicts with current minvotes setting
-            if (minvotesChanged && apiMinValues.minvotes > settings.minvotes) {
-                debugLog('minvotes conflict detected');
-                updatedSettings.minvotes = apiMinValues.minvotes;
-                warningMessage += `Minimum leadott válaszok száma frissítve: ${apiMinValues.minvotes}. `;
-                hasConflict = true;
+            // Reload the settings in memory
+            settings.apiMinvotes = apiMinValues.minvotes;
+            settings.apiVotepercentage = apiMinValues.votepercentage;
+            if (updatedSettings.minvotes) {
+                settings.minvotes = updatedSettings.minvotes;
             }
-            
-            // Check for conflicts with current votepercentage setting
-            if (votepercentageChanged && apiMinValues.votepercentage > (settings.votepercentage / 100.0)) {
-                debugLog('votepercentage conflict detected');
-                updatedSettings.votepercentage = apiMinValues.votepercentage;
-                warningMessage += `Azonos válasz aránya frissítve: ${(apiMinValues.votepercentage * 100).toFixed(1)}%. `;
-                hasConflict = true;
-            }
-            
-            // Save updated settings if there were changes
-            if (Object.keys(updatedSettings).length > 0) {
-                chrome.storage.sync.set(updatedSettings, function() {
-                    debugLog('Updated settings saved:', updatedSettings);
-                });
-                
-                // Reload the settings in memory
-                settings.apiMinvotes = apiMinValues.minvotes;
-                settings.apiVotepercentage = apiMinValues.votepercentage;
-                if (updatedSettings.minvotes) {
-                    settings.minvotes = updatedSettings.minvotes;
-                }
-                if (updatedSettings.votepercentage) {
-                    settings.votepercentage = updatedSettings.votepercentage * 100.0;
-                }
-            }
-            
-            // Show warning to user if there was a conflict
-            if (hasConflict) {
-                warningMessage += 'A beállítások az API minimumok szerint frissültek.';
-                debugLog('Showing warning:', warningMessage);
-                new taskStatus(warningMessage, 'error');
+            if (updatedSettings.votepercentage) {
+                settings.votepercentage = updatedSettings.votepercentage * 100.0;
             }
         }
         
-        resolve();
-    });
+        // Show warning to user if there was a conflict
+        if (hasConflict) {
+            warningMessage += 'A beállítások az API minimumok szerint frissültek.';
+            debugLog('Showing warning:', warningMessage);
+            new taskStatus(warningMessage, 'error');
+        }
+    }
 }
 
 async function fetchAnnouncements() {
@@ -454,15 +449,14 @@ async function tryAutoFillTask(task, taskFillStatus, autoNext) {
             }
         }
         else {
-            taskFillStatus.fail({text: `nem elég a leadott válasz (${queryResult.votes}/${queryResult.totalVotes} ugyanolyan : ${100*queryResult.votes / queryResult.totalVotes}%), 
-                kéne: ${settings.minvotes} össz válasz és ${settings.votepercentage}%`, status: 'skipped'});
+            taskFillStatus.fail({text: `nincs még erre a feladatra elég leadott válasz, vagy az azonos válaszok aránya nem elég magas`, status: 'skipped'});
             debugLog('Not enough votes or not enough percentage of votes.');
             debugLog('Total votes:', queryResult.totalVotes, "required votes:", settings.minvotes);
             debugLog('Vote%:', 100*queryResult.votes / queryResult.totalVotes , "required vote%:", settings.votepercentage);
         }
     }
     else {
-        taskFillStatus.fail({text: 'nincs még erre a feladatra leadott válasz',status: 'skipped'});
+        taskFillStatus.fail({text: 'nincs még erre a feladatra elég leadott válasz, vagy az azonos válaszok aránya nem elég magas',status: 'skipped'});
         debugLog('No solution found in the database.');
     }
 }
