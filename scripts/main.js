@@ -158,8 +158,26 @@ function getWebSocketUrl() {
         });
     });
 }
-
+let connectionPending = false;
 function connectWebSocket() {
+    // If a connection is already pending, wait for it to complete
+    if (connectionPending) {
+        return new Promise((resolve, reject) => {
+            const checkConnection = setInterval(() => {
+                if (wsGlobal && wsGlobal.readyState === WebSocket.OPEN) {
+                    clearInterval(checkConnection);
+                    resolve();
+                }
+            }, 150);
+            // Timeout after 30 seconds
+            setTimeout(() => {
+                clearInterval(checkConnection);
+                reject(new Error('WebSocket connection pending timeout'));
+            }, 30000);
+        });
+    }
+
+    connectionPending = true;
     return new Promise((resolve, reject) => {
         if (wsGlobal && wsGlobal.readyState === WebSocket.OPEN) {
             resolve();
@@ -171,7 +189,7 @@ function connectWebSocket() {
             
             wsGlobal.onopen = () => {
                 debugLog('WebSocket connection established');
-                resolve();
+                setTimeout(() => resolve(), 100);
             };
             
             wsGlobal.onerror = error => {
@@ -200,6 +218,8 @@ function connectWebSocket() {
                 wsGlobal = null;
             };
         });
+    }).finally(() => {
+        connectionPending = false;
     });
 }
 
@@ -434,8 +454,17 @@ async function main_loop() {
         }
     })
 
-    // Listen for key presses, just used for debug
     document.addEventListener('keydown', async function(event) {
+        
+        if (event.ctrlKey && event.key.toLowerCase() === 'm') {
+            goToNextTaskWithoutSaving();
+        }
+        else if (event.ctrlKey && event.key.toLowerCase() === 'q') {
+            goToNextTask();
+        }
+    });
+
+    if (_DEBUG) document.addEventListener('keydown', async function(event) {
         if (event.key.toLowerCase() === 'i') {
             if (currentTask != null) {
                 debugLog('URL:', url);
@@ -464,12 +493,6 @@ async function main_loop() {
         }
         else if (event.key.toLowerCase() === 'h') {
             debugLog('current task ID: ', await getTaskUniqueID());
-        }
-        else if (event.ctrlKey && event.key.toLowerCase() === 'm') {
-            goToNextTaskWithoutSaving();
-        }
-        else if (event.ctrlKey && event.key.toLowerCase() === 'q') {
-            goToNextTask();
         }
     });
     while (true) {
@@ -511,19 +534,21 @@ async function main_loop() {
             copyNextButton();
         }
 
-        let taskFillStatus = new taskStatus('feladat kitöltése...', 'processing');
+        if (settings.autoComplete) {
+            let taskFillStatus = new taskStatus('feladat kitöltése...', 'processing');
 
-        if (hasAnswers(currentTask.answerFields)) {
-            debugLog('Already has answers, skipping autofill...');
-            taskFillStatus.fail({text: "már van valami beírva; kihagyva", color:'rgba(156, 39, 176, 0.85)'});
-        }
-        else if (settings.autoComplete) {
-            try {
-                await tryAutoFillTask(currentTask, taskFillStatus, autoNext);
+            if (hasAnswers(currentTask.answerFields)) {
+                debugLog('Already has answers, skipping autofill...');
+                taskFillStatus.fail({text: "már van valami beírva; kihagyva", color:'rgba(156, 39, 176, 0.85)'});
             }
-            catch (error) {
-                taskFillStatus.error({"text": "hiba a feladat lekérése során: " + error});
-                debugLog('Error fetching task from DB:', error);
+            else{
+                try {
+                    await tryAutoFillTask(currentTask, taskFillStatus, autoNext);
+                }
+                catch (error) {
+                    taskFillStatus.error({"text": "hiba a feladat lekérése során: " + error});
+                    debugLog('Error fetching task from DB:', error);
+                }
             }
         }
         await updateSelectedAnswers(currentTask);
