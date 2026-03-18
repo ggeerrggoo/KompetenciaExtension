@@ -62,8 +62,8 @@ function updateMinimumDisplay() {
 function saveOptions() {
 
     const options = {
-        minvotes: document.getElementById('minvotes').value,
-        votepercentage: document.getElementById('votepercentage').value/100.0,
+        minvotes: parseInt(document.getElementById('minvotes').value),
+        votepercentage: parseInt(document.getElementById('votepercentage').value) / 100.0,
         contributer: document.getElementById('contributer').checked,
         url: document.getElementById('url').value,
         autoComplete: document.getElementById('auto-complete').checked,
@@ -178,7 +178,9 @@ function showAdvanced() {
 }
 
 function resetDefaultOptions() {
-    chrome.storage.sync.set(defaultOptions, function() {
+    let defaultsForReset = {...defaultOptions};
+    defaultsForReset.lastAnnouncement = new Date().toISOString();
+    chrome.storage.sync.set(defaultsForReset, function() {
         // Update status or reload page
         const status = document.getElementById('status');
         status.textContent = 'Alapértelmezett beállítások visszaállítva.';

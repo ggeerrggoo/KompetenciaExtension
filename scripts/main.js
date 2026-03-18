@@ -182,7 +182,8 @@ async function checkAndUpdateApiMinimums() {
         if (hasConflict) {
             warningMessage += 'A beállítások az API minimumok szerint frissültek.';
             debugLog('Showing warning:', warningMessage);
-            new taskStatus(warningMessage, 'error');
+            let settingUpdateWarning = new taskStatus(warningMessage);
+            settingUpdateWarning.fail({stayTime: 6000, color: 'rgba(170, 0, 255, 0.9)'});
         }
     }
 }
@@ -204,11 +205,19 @@ async function fetchAnnouncements() {
                 debugLog('No new announcements found.');
                 return false; // Return false if no new announcements
             }
+            const huDateTimeFormatter = new Intl.DateTimeFormat('hu-HU', {
+                dateStyle: 'long',
+                timeStyle: 'short'
+            });
             for (let i = 0; i < announcements.length; i++) {
                 const announcement = announcements[i];
                 items.lastAnnouncement = announcement.created_at;
+                const createdAtDate = new Date(announcement.created_at.replace(' ', 'T'));
+                const formattedCreatedAt = Number.isNaN(createdAtDate.getTime())
+                    ? announcement.created_at
+                    : huDateTimeFormatter.format(createdAtDate);
                 debugLog('New announcement:', announcement);
-                alert(`Új közlemény:\n${announcement.title}\n\n${announcement.content}\n\n${announcement.created_at}`);
+                alert(`Új közlemény:\n${announcement.title}\n\n${announcement.content}\n\n${formattedCreatedAt}`);
             }
             if (items.lastAnnouncement) {
                 const lastDate = new Date(items.lastAnnouncement.replace(' ', 'T'));
@@ -490,6 +499,9 @@ function addCustomButton(originalBtn, newText, description, onClickCallback) {
     if (isUIHidden()) {
         newBtn.style.display = 'none';
     }
+    if(newBtn.classList.contains('d-block')) {
+        newBtn.classList.remove('d-block');
+    }
 }
 
 async function goToNextTaskWithoutSaving() {
@@ -588,10 +600,6 @@ async function main_loop() {
                 blockUserInteraction();
             }
         }
-        else if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'h') {
-            event.preventDefault();
-            toggleTaskStatusesVisibility();
-        }
         else if (event.key.toLowerCase() === 'h') {
             debugLog('current task ID: ', await getTaskUniqueID());
         }
@@ -600,7 +608,9 @@ async function main_loop() {
         if (currentTask) await detectUrlChange(); //if no task yet, we should immediately see if there is one
         
         debugLog('New URL, waiting for task...');
+        
         let getTaskStatus = new taskStatus('feladatra várakozás...', 'processing');
+
         await waitForTask();
         debugLog('task seen');
         getTaskStatus.set_text("feladat észlelve");
@@ -636,25 +646,31 @@ async function main_loop() {
         }
 
         if (settings.autoComplete) {
-            let taskFillStatus = new taskStatus('feladat kitöltése...', 'processing');
+            maybeFillTask(currentTask);
+        }
 
-            if (hasAnswers(currentTask.answerFields)) {
+
+        await updateSelectedAnswers(currentTask);
+        taskFilledAnswers = JSON.parse(JSON.stringify(currentTask.answerFields.map(input => input.value))); //the answers that were there when task loaded, or after autocomplete
+    }
+}
+
+async function maybeFillTask(task) {
+    let taskFillStatus = new taskStatus('feladat kitöltése...', 'processing');
+
+            if (hasAnswers(task.answerFields)) {
                 debugLog('Already has answers, skipping autofill...');
                 taskFillStatus.fail({text: "már van valami beírva; kihagyva", color:'rgba(156, 39, 176, 0.85)'});
             }
             else{
                 try {
-                    await tryAutoFillTask(currentTask, taskFillStatus, autoNext);
+                    await tryAutoFillTask(task, taskFillStatus, autoNext);
                 }
                 catch (error) {
                     taskFillStatus.error({"text": "hiba a feladat lekérése során: " + error});
                     debugLog('Error fetching task from DB:', error);
                 }
             }
-        }
-        await updateSelectedAnswers(currentTask);
-        taskFilledAnswers = JSON.parse(JSON.stringify(currentTask.answerFields.map(input => input.value))); //the answers that were there when task loaded, or after autocomplete
-    }
 }
 
 async function main_loop_wrapper() {
