@@ -559,7 +559,7 @@ async function main_loop() {
 
     document.addEventListener('keydown', async function(event) {
         
-        if (event.ctrlKey && event.key.toLowerCase() === 'm') {
+        if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'q') {
             event.preventDefault();
             goToNextTaskWithoutSaving();
         }
@@ -570,6 +570,13 @@ async function main_loop() {
         else if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'h') {
             event.preventDefault();
             toggleTaskStatusesVisibility();
+        }
+        else if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'f') {
+            event.preventDefault();
+            if (currentTask != null) {
+                debugLog('Trying to autofill task with keybind...');
+                maybeFillTask(currentTask);
+            }
         }
     });
 
@@ -582,8 +589,7 @@ async function main_loop() {
         }
         else if (event.key.toLowerCase() === 's') {
             if (currentTask != null) {
-                debugLog('Syncing task with DB (keybind clicked)... , ', hasAnswers(currentTask.answerFields) ? 'has answers' : 'no answers');
-                syncTaskWithDB(currentTask);
+                debugLog(`prev. task sync debug: \ncancelTaskSync: ${cancelTaskSync}, \nhasAnswers: ${hasAnswers(currentTask.answerFields)}, \ntaskFilledAnswers  : ${taskFilledAnswers}, \ncurrentTask answers: ${currentTask.answerFields.map(input => input.value)}`);
             }
         }
         else if(event.key.toLowerCase() === 'u') {
@@ -617,11 +623,11 @@ async function main_loop() {
 
         if (settings.isContributor && !cancelTaskSync && currentTask != null && hasAnswers(currentTask.answerFields) && taskFilledAnswers.toString() !== currentTask.answerFields.map(input => input.value).toString()) {
             debugLog('New task found, syncing old one with DB...');
-            let syncstatus = new taskStatus('előző feladat szinkronizálása...', 'processing');
+            let syncstatus = new taskStatus('előző feladat küldése...', 'processing');
             syncTaskWithDB(currentTask).then(() => {
-                syncstatus.succeed({"text": "előző feladat szinkronizálása kész"});
+                syncstatus.succeed({"text": "előző feladat küldése kész"});
             }).catch((error) => {
-                syncstatus.error({"text": "hiba az előző feladat szinkronizálása során: " + error});
+                syncstatus.error({"text": "hiba az előző feladat küldése során: " + error});
             });
         }
         else {
@@ -634,7 +640,7 @@ async function main_loop() {
         }
 
         currentTask = await getTask();
-        updateSelectedAnswers(currentTask);
+        await updateSelectedAnswers(currentTask);
 
         getTaskStatus.succeed({"text": "feladat feldolgozva"});
         url = window.location.href;
@@ -646,7 +652,7 @@ async function main_loop() {
         }
 
         if (settings.autoComplete) {
-            maybeFillTask(currentTask);
+            await maybeFillTask(currentTask);
         }
 
 
@@ -660,7 +666,7 @@ async function maybeFillTask(task) {
 
             if (hasAnswers(task.answerFields)) {
                 debugLog('Already has answers, skipping autofill...');
-                taskFillStatus.fail({text: "már van valami beírva; kihagyva", color:'rgba(156, 39, 176, 0.85)'});
+                taskFillStatus.fail({text: "már van valami beírva; automata kitöltés kihagyva", color:'rgba(156, 39, 176, 0.85)'});
             }
             else{
                 try {
