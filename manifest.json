@@ -1,7 +1,7 @@
 {
   "name": "TeKaKu",
   "description": "A Tehetség Kapujának Kulcsa - automata kompetenciamérés",
-  "version": "1.0",
+  "version": "1.1",
   "manifest_version": 3,
   "action": {
     "default_popup": "hello.html",
