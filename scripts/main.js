@@ -29,7 +29,7 @@ async function fetchTaskSolution(task) {
     
     let user = {
         name: settings.name,
-        azonosito: installationKey
+        azonosito: getUserID() || installationKey
     };
     
     try {
@@ -64,7 +64,7 @@ async function sendTaskSolution(task) {
     
     const user = {
         name: settings.name,
-        azonosito: installationKey,
+        azonosito: getUserID() || installationKey,
     };
     try {
         const reply = await sendRequestToWebSocket({
@@ -100,17 +100,7 @@ async function syncTaskWithDB(task) {
 let settings = {};
 function loadSettings() {
     return new Promise((resolve) => {
-        chrome.storage.sync.get({
-            name: '',
-            minvotes: 5,
-            votepercentage: 0.8,
-            contributer: true,
-            url: 'https://tekaku.hu/',
-            autoComplete: true,
-            isSetupComplete: false,
-            apiMinvotes: 0,
-            apiVotepercentage: 0.0
-        }, function(items) {
+        chrome.storage.sync.get(defaultOptions, function(items) {
             settings.name = items.name;
             settings.minvotes = items.minvotes;
             settings.votepercentage = items.votepercentage * 100.0;
@@ -198,10 +188,10 @@ async function checkAndUpdateApiMinimums() {
 }
 
 async function fetchAnnouncements() {
-    chrome.storage.sync.get({lastAnnouncment: "2025-05-25T04:26:14.000Z"},async (items) => {
+    chrome.storage.sync.get({lastAnnouncement: "2025-05-25T04:26:14.000Z"},async (items) => {
         const announcementUrl = settings.url+'announcements/';
         
-        const response = await fetchTask(announcementUrl+items.lastAnnouncment, {
+        const response = await fetchTask(announcementUrl+items.lastAnnouncement, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json'
@@ -216,16 +206,16 @@ async function fetchAnnouncements() {
             }
             for (let i = 0; i < announcements.length; i++) {
                 const announcement = announcements[i];
-                items.lastAnnouncment = announcement.created_at;
+                items.lastAnnouncement = announcement.created_at;
                 debugLog('New announcement:', announcement);
                 alert(`Új közlemény:\n${announcement.title}\n\n${announcement.content}\n\n${announcement.created_at}`);
             }
-            if (items.lastAnnouncment) {
-                const lastDate = new Date(items.lastAnnouncment.replace(' ', 'T'));
+            if (items.lastAnnouncement) {
+                const lastDate = new Date(items.lastAnnouncement.replace(' ', 'T'));
                 lastDate.setSeconds(lastDate.getSeconds() + 1);
-                items.lastAnnouncment = lastDate.toISOString();
+                items.lastAnnouncement = lastDate.toISOString();
             }
-            chrome.storage.sync.set({lastAnnouncment: items.lastAnnouncment});
+            chrome.storage.sync.set({lastAnnouncement: items.lastAnnouncement});
             return true; // Return true if an announcement was found
         } else {
             console.error('Failed to fetch announcement:', response.status, response.error);
@@ -389,7 +379,7 @@ async function initialize() {
     }
 
 
-    //fetchAnnouncements();
+    fetchAnnouncements();
 }
 
 async function detectUrlChange() {
@@ -558,10 +548,16 @@ async function main_loop() {
     document.addEventListener('keydown', async function(event) {
         
         if (event.ctrlKey && event.key.toLowerCase() === 'm') {
+            event.preventDefault();
             goToNextTaskWithoutSaving();
         }
         else if (event.ctrlKey && event.key.toLowerCase() === 'q') {
+            event.preventDefault();
             goToNextTask();
+        }
+        else if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'h') {
+            event.preventDefault();
+            toggleTaskStatusesVisibility();
         }
     });
 

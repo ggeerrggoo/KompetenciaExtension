@@ -1,3 +1,4 @@
+/* global chrome */
 import { maxImageHashSize, taskFieldSelectors, _DEBUG } from './constants.js';   
 //utility funcs NOT requiring DOM access:
 export { debugLog, dedupeByKey, hashSHA256, waitForImageLoad, waitForLoadingScreen, fetchMinSettings, isUIHidden, getInstallationKey}

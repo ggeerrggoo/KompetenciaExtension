@@ -36,7 +36,10 @@ export const defaultOptions = {
     contributer: false, 
     url: 'https://tekaku.hu/',
     autoComplete: true,
-    isSetupComplete: false
+    isSetupComplete: false,
+    lastAnnouncement: "2025-05-25T04:26:14.000Z",
+    apiMinvotes: 0,
+    apiVotepercentage: 0.0
 };
 
 /** 
@@ -51,4 +54,4 @@ export const maxImageHashSize = 20;
  */
 export const autoNext = false;
 
-export const _DEBUG = false;
+export const _DEBUG = true;

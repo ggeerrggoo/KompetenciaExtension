@@ -69,15 +69,6 @@ function saveOptions() {
         autoComplete: document.getElementById('auto-complete').checked,
         isSetupComplete: true
     };
-    
-    if(options.votepercentage > 1.0 || options.votepercentage < 0.51) {
-        alert("az azonos válaszok elfogadásához szükséges szavazati aránynak 51% és 100% között kell lennie");
-        return;
-    }
-    if(options.minvotes <= 0) {
-        alert("a minimum szavazatok számának pozitív egésznek kell lennie");
-        return;
-    }
     // Validate against API minimums
     if(apiMinValues.minvotes > 0 && options.minvotes < apiMinValues.minvotes) {
         alert(`A minimum leadott válaszok száma nem lehet kevesebb, mint ${apiMinValues.minvotes}`);

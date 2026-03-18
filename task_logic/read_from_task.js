@@ -69,7 +69,7 @@ function getUserID() {
     if (match && match[1]) {
         return hashSHA256(decodeURIComponent(match[1]));
     }
-    return "unknown";
+    return "";
 }
 
 
