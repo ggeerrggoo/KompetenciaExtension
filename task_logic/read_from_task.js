@@ -46,6 +46,19 @@ function isThereTask() {
     }
 }
 
+async function hasTaskImages(fullTaskField) {
+    const images = fullTaskField.querySelectorAll('img');
+    let allIds = "";
+    if (images.length > 0) {
+        for (let img of images) {
+            let imageId = await hashImageToID(img);
+            allIds += imageId;
+        }
+        return allIds;
+    }
+    return "";
+}
+
 async function getTaskUniqueID() {
     const fullTaskField = document.querySelector(taskFieldSelectors.fullTask);
     if (!fullTaskField) {
@@ -53,8 +66,9 @@ async function getTaskUniqueID() {
     }
 
     const allText = fullTaskField.textContent.trim();
+    const imageIds = await hasTaskImages(fullTaskField);
 
-    return hashSHA256(allText);
+    return hashSHA256(allText + imageIds);
 
 }
 
