@@ -1,6 +1,6 @@
 {
-  "name": "TeKaKu",
-  "description": "A Tehetség Kapujának Kulcsa - automata kompetenciamérés",
+  "name": "TeKaKu - automata kompetenciamérés",
+  "description": "A Tehetség Kapujának Kulcsa",
   "version": "1.1.1",
   "manifest_version": 3,
   "action": {
@@ -12,7 +12,8 @@
       "js":["scripts/content_loader.js"],
       "matches": [
         "*://*.tehetsegkapu.hu/*",
-        "*://tehetsegkapu.hu/*"
+        "*://tehetsegkapu.hu/*",
+        "*://*.oktatas.hu/*"
       ]
     }
   ],
@@ -23,7 +24,7 @@
         "task_logic/*.js",
         "setup_files/*.html"
       ],
-      "matches": ["*://*.tehetsegkapu.hu/*", "*://tehetsegkapu.hu/*"]
+      "matches": ["*://*.tehetsegkapu.hu/*", "*://tehetsegkapu.hu/*", "*://*.oktatas.hu/*"]
     }
   ],
   "permissions": [
