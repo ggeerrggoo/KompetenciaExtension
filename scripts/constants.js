@@ -1,6 +1,6 @@
 export const taskFieldSelectors = {
     fullTask: 'div.tk-bgcolor-white.tk-shadow-around.p-4, div.szeparalt-container',
-    loadingLogo: 'svg.ng-tns-c107-0',
+    loadingLogo: 'svg.ng-tns-c107-0, #okm-loader',
     selectText: {
         detect: 'div.valasz-betujel',
         answers: 'div.valaszlehetoseg.valaszlehetoseg-hover.ng-star-inserted'
@@ -54,4 +54,4 @@ export const maxImageHashSize = 20;
  */
 export const autoNext = false;
 
-export const _DEBUG = false;
+export const _DEBUG = true;
