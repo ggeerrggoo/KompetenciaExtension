@@ -413,6 +413,11 @@ async function goToNextTask() {
 
 function aggregateQueryResults(queryResultNew) {
     if (!queryResultNew || !Array.isArray(queryResultNew) || queryResultNew.length === 0) {
+        if(_DEBUG && queryResultNew === 0) {
+            debugLog('IRNS');
+            let irnsTask = new taskStatus('nincs megoldás');
+            irnsTask.fail({color: 'rgba(128, 128, 128, 0.85)', stayTime: 2000});
+        }
         return null;
     }
 
@@ -542,7 +547,6 @@ async function main_loop() {
                     debugLog('lezárás clicked, syncing last task');
                     let syncPromise = syncTaskWithDB(currentTask);
                     let finalSyncStatus = new taskStatus('utolsó feladat küldése...', 'processing');
-                    debugLog('Sync promise:', syncPromise);
                     syncPromise.then(() => {
                         finalSyncStatus.succeed({"text": "utolsó feladat küldése kész"});
                     }).catch((error) => {
@@ -612,8 +616,6 @@ async function main_loop() {
     while (true) {
         if (currentTask) await detectUrlChange(); //if no task yet, we should immediately see if there is one
         
-        debugLog('New URL, waiting for task...');
-        
         let getTaskStatus = new taskStatus('feladatra várakozás...', 'processing');
 
         await waitForTask();
@@ -621,7 +623,6 @@ async function main_loop() {
         getTaskStatus.set_text("feladat észlelve");
 
         if (settings.isContributor && !cancelTaskSync && currentTask != null && hasAnswers(currentTask.answerFields) && taskFilledAnswers.toString() !== currentTask.answerFields.map(input => input.value).toString()) {
-            debugLog('New task found, syncing old one with DB...');
             let syncstatus = new taskStatus('előző feladat küldése...', 'processing');
             syncTaskWithDB(currentTask).then(() => {
                 syncstatus.succeed({"text": "előző feladat küldése kész"});
