@@ -18,13 +18,13 @@ function isUIHidden() {
  */
 function getInstallationKey() {
     return new Promise((resolve) => {
-        chrome.storage.local.get({ installationKey: null }, (items) => {
+        chrome.storage.sync.get({ installationKey: null }, (items) => {
             if (items.installationKey) {
                 resolve(items.installationKey);
             } else {
                 // Fallback: generate a new key if not found
-                const fallbackKey = `install_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 15)}`;
-                chrome.storage.local.set({ installationKey: fallbackKey });
+                const fallbackKey = `install-fb_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 15)}`;
+                chrome.storage.sync.set({ installationKey: fallbackKey });
                 resolve(fallbackKey);
             }
         });

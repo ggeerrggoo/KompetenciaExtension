@@ -530,7 +530,6 @@ async function main_loop() {
      * @type {Array<answerField>}
      */
     let taskFilledAnswers = [];
-    let selectedAnswers = [];
 
     document.addEventListener('click', async function(event) {
         if (document.getElementById('__input-blocker') || currentTask === null) return;

@@ -1,6 +1,6 @@
 export const taskFieldSelectors = {
     fullTask: 'div.tk-bgcolor-white.tk-shadow-around.p-4, div.szeparalt-container',
-    loadingLogo: 'svg.ng-tns-c107-0, #okm-loader',
+    loadingLogo: 'svg.ng-tns-c107-0, #okm-loader, div.okm-loading',
     selectText: {
         detect: 'div.valasz-betujel',
         answers: 'div.valaszlehetoseg.valaszlehetoseg-hover.ng-star-inserted'
@@ -23,9 +23,9 @@ export const taskFieldSelectors = {
         answers: 'div.csoportos-valasz-betujel'
     },
     dragDrop: {
-        detect: 'div.cdk-drag.cella-dd.ng-star-inserted, div.cdk-drag.szoveg-dd-tartalom',
-        drag: 'div.cdk-drag.cella-dd, div.cdk-drag.szoveg-dd-tartalom',
-        drop: 'div[id*="destination_"], div[id*="dnd_nyelo_"]'
+        detect: 'div.cdk-drag',
+        drag: 'div.cdk-drag.cella-dd, div.cdk-drag.szoveg-dd-tartalom, div.cdk-drag.ddcimke',
+        drop: 'div[id*="destination_"], div[id*="dnd_nyelo_"], div[id*="cdk-drop-list"]'
     }
 };
 
@@ -54,4 +54,4 @@ export const maxImageHashSize = 20;
  */
 export const autoNext = false;
 
-export const _DEBUG = true;
+export const _DEBUG = false;

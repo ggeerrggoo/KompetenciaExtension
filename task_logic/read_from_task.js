@@ -46,7 +46,7 @@ function isThereTask() {
     }
 }
 
-async function hasTaskImages(fullTaskField) {
+async function hashTaskImages(fullTaskField) {
     const images = fullTaskField.querySelectorAll('img');
     let allIds = "";
     if (images.length > 0) {
@@ -66,7 +66,7 @@ async function getTaskUniqueID() {
     }
 
     const allText = fullTaskField.textContent.trim();
-    const imageIds = await hasTaskImages(fullTaskField);
+    const imageIds = await hashTaskImages(fullTaskField);
 
     return hashSHA256(allText + imageIds);
 
