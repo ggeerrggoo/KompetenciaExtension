@@ -29,7 +29,7 @@ async function fetchTaskSolution(task) {
     
     let user = {
         name: settings.name,
-        azonosito: getUserID() || installationKey
+        azonosito: installationKey
     };
     
     try {
@@ -64,7 +64,7 @@ async function sendTaskSolution(task) {
     
     const user = {
         name: settings.name,
-        azonosito: getUserID() || installationKey,
+        azonosito: installationKey,
     };
     try {
         const reply = await sendRequestToWebSocket({
@@ -578,7 +578,7 @@ async function main_loop() {
             event.preventDefault();
             if (currentTask != null) {
                 debugLog('Trying to autofill task with keybind...');
-                maybeFillTask(currentTask);
+                maybeFillTask(currentTask, true);
             }
         }
     });
@@ -635,7 +635,7 @@ async function main_loop() {
             !settings.isContributor ? debugLog('user not a contributor') : 
             currentTask == null ? debugLog('no current task') : 
             !hasAnswers(currentTask ? currentTask.answerFields : []) ? debugLog('no answers') : 
-            taskFilledAnswers.toString() === currentTask.answerFields.map(input => input.value).toString() ? debugLog('no changes from prev. filled answers') : debugLog('WTF?');
+            taskFilledAnswers.toString() === currentTask.answerFields.map(input => input.value).toString() ? debugLog('no changes from prev. filled answers') : debugLog('user clicked continue w/o sending');
 
         }
 
@@ -652,7 +652,7 @@ async function main_loop() {
         }
 
         if (settings.autoComplete) {
-            await maybeFillTask(currentTask);
+            await maybeFillTask(currentTask, false);
         }
 
 
@@ -661,10 +661,10 @@ async function main_loop() {
     }
 }
 
-async function maybeFillTask(task) {
+async function maybeFillTask(task, ignoreExistingAnswers = false) {
     let taskFillStatus = new taskStatus('feladat kitöltése...', 'processing');
 
-            if (hasAnswers(task.answerFields)) {
+            if (hasAnswers(task.answerFields) && !ignoreExistingAnswers) {
                 debugLog('Already has answers, skipping autofill...');
                 taskFillStatus.fail({text: "már van valami beírva; automata kitöltés kihagyva", color:'rgba(156, 39, 176, 0.85)'});
             }

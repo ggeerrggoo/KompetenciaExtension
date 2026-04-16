@@ -1,4 +1,4 @@
-import { dedupeByKey, waitForImageLoad, hashImageToID, hashSHA256, debugLog} from '../scripts/utils.js';
+import { dedupeByKey, waitForImageLoad, hashImageToID, hashSHA256, debugLog, getInstallationKey} from '../scripts/utils.js';
 import { taskFieldSelectors } from '../scripts/constants.js';
 
 export { answerField, task, isThereTask, getTaskUniqueID, getTaskDDfieldID,getUserID, updateSelectedAnswers, getTask, hasAnswers }
@@ -78,12 +78,7 @@ function getAnswerFields(selector, type, idGenerator = null) {
 }
 
 function getUserID() {
-    const url = window.location.href;
-    const match = url.match(/[?&]azon=([^&%]+)/); // regex matches 'azon' parameter until a % character, expecting azon=A111-B222%2F...
-    if (match && match[1]) {
-        return hashSHA256(decodeURIComponent(match[1]));
-    }
-    return "";
+    return getInstallationKey()
 }
 
 
