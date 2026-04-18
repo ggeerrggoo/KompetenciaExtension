@@ -196,6 +196,16 @@ function setNotSavedStatus() {
     status.textContent = 'Mentés szükséges!';
 }
 
+function showExtensionVersion() {
+    const versionBadge = document.getElementById('version-badge');
+    if (!versionBadge) {
+        return;
+    }
+
+    const manifest = chrome.runtime.getManifest();
+    versionBadge.textContent = `v${manifest.version}`;
+}
+
 document.getElementById('minvotes').addEventListener('input', function() {
     setNotSavedStatus();
 });
@@ -220,6 +230,7 @@ document.addEventListener('keydown', function(event) {
 });
 
 document.addEventListener('DOMContentLoaded', async function() {
+    showExtensionVersion();
     await loadApiMinValues();
     restoreOptions();
 });
@@ -235,6 +246,7 @@ window.addEventListener('beforeunload', (event) => {
 });
 // Initial load
 (async function() {
+    showExtensionVersion();
     await loadApiMinValues();
     restoreOptions();
 })();
