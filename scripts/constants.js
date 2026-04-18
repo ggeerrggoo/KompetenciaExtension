@@ -47,6 +47,7 @@ export const defaultOptions = {
  * @type {number}
  */
 export const maxImageHashSize = 20;
+export const maxImageLoadWaitTime = 5000; // Max time to wait for an image to load for hashing (in ms)
     
 /** 
  * Whether to automatically proceed to the next task after answering.
@@ -54,4 +55,4 @@ export const maxImageHashSize = 20;
  */
 export const autoNext = false;
 
-export const _DEBUG = true;
+export const _DEBUG = false;

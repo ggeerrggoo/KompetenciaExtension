@@ -1,5 +1,5 @@
 /* global chrome */
-import { maxImageHashSize, taskFieldSelectors, _DEBUG } from './constants.js';   
+import { maxImageHashSize, taskFieldSelectors, maxImageLoadWaitTime,  _DEBUG } from './constants.js';   
 //utility funcs NOT requiring DOM access:
 export { debugLog, dedupeByKey, hashSHA256, waitForImageLoad, waitForLoadingScreen, fetchMinSettings, isUIHidden, getInstallationKey}
 
@@ -49,21 +49,27 @@ async function hashSHA256(text) {
     .join('');
 }
 
-function waitForImageLoad(img) {
-    return new Promise(resolve => {
-        if (img.complete) {
-            resolve(); // already loaded
-        } else {
-            img.onload = img.onerror = () => resolve();
-        }
-    });
+async function waitForImageLoad(img) {
+    let imageLoadWaitTime = 0;
+    while ((img.naturalWidth === 0 || img.naturalHeight === 0) && imageLoadWaitTime < maxImageLoadWaitTime) {
+        debugLog(`waiting for image to load for hashing, current wait time: ${imageLoadWaitTime}ms`);
+        await new Promise(resolve => setTimeout(resolve, 100));
+        imageLoadWaitTime += 100;
+    }
+    if (img.naturalWidth === 0 || img.naturalHeight === 0) {
+        console.warn(`Image failed to load within the maximum wait time for hashing (${maxImageLoadWaitTime}ms):`, img);
+        return -1; // indicate failure to load
+    }
+    else return 0;
 }
 
 //utility funcs which DO require DOM access:
 
 export { hashImageToID, getCurrentScale, blockUserInteraction, unblockUserInteraction, zoomOut, zoomIn }
 async function hashImageToID(img) {
-  if (!img.naturalWidth || !img.naturalHeight) return null;
+  if(await waitForImageLoad(img) === -1) {
+    return null;
+  }
 
   const canvas = document.createElement('canvas');
   canvas.width = maxImageHashSize;

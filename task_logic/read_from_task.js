@@ -1,4 +1,4 @@
-import { dedupeByKey, waitForImageLoad, hashImageToID, hashSHA256, debugLog, getInstallationKey} from '../scripts/utils.js';
+import { dedupeByKey, hashImageToID, hashSHA256, debugLog, getInstallationKey} from '../scripts/utils.js';
 import { taskFieldSelectors } from '../scripts/constants.js';
 
 export { answerField, task, isThereTask, getTaskUniqueID, getTaskDDfieldID,getUserID, updateSelectedAnswers, getTask, hasAnswers }
@@ -101,7 +101,6 @@ async function getTaskDDfieldID(div, dragordrop) {
 async function getDragFieldID(div) {
   const img = div.querySelector('img');
   if (img) {
-    await waitForImageLoad(img);
     const idFromImage = await hashImageToID(img);
     if (idFromImage) return idFromImage;
   }
@@ -173,6 +172,7 @@ async function updateSelectedAnswers(task) {
 
 async function getTask() {
     let uniqueID = await getTaskUniqueID();
+    debugLog('Generated unique ID for task:', uniqueID);
     let answers = [];
     answers.push(
         ...await getAnswerFields(taskFieldSelectors.selectText.answers, 'select'),
