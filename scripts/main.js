@@ -444,10 +444,12 @@ async function tryAutoFillTask(task, taskFillStatus, autoNext) {
             debugLog('Enough votes and enough percentage of votes.');
             taskFillStatus.set_text('válasz beírása...');
             await writeAnswers(task, task.answerFields, JSON.parse(queryResult.answer));
-            //await new Promise(resolve => setTimeout(resolve, 300));
             taskFillStatus.succeed({"text": "válasz beírása kész"});
-            //scroll to bottom of the page
-            
+
+            if (settings.isContributor) {
+                createCheckedButton();
+            }
+
             if (autoNext) {
                 await goToNextTask();
             }
@@ -472,15 +474,21 @@ async function tryAutoFillTask(task, taskFillStatus, autoNext) {
  * @param {Function} onClickCallback - The function to run when clicked.
  */
 let customBtnId = 0;
-function addCustomButton(originalBtn, newText, description, onClickCallback) {
+function addCustomButton(originalBtn, newText, description, uniqueClass, onClickCallback) {
     
-    if (originalBtn.parentElement.querySelector('.tekaku-btn')) return;
+    const existingBtns = originalBtn.parentElement.querySelectorAll('.tekaku-btn');
+    for (let btn of existingBtns) {
+        if(btn.classList.contains(uniqueClass)) {
+            return btn;
+        }
+    }
     
     const newBtn = originalBtn.cloneNode(true);
 
     newBtn.innerText = newText;
     newBtn.id = "tekaku-btn-" + customBtnId++;
     newBtn.classList.add('tekaku-btn');
+    newBtn.classList.add(uniqueClass);
 
     if(description) {
         newBtn.title = description;
@@ -507,6 +515,7 @@ function addCustomButton(originalBtn, newText, description, onClickCallback) {
     if(newBtn.classList.contains('d-block')) {
         newBtn.classList.remove('d-block');
     }
+    return newBtn;
 }
 
 async function goToNextTaskWithoutSaving() {
@@ -518,13 +527,70 @@ let cancelTaskSync = false;
 function copyNextButton() {
     let nextBtn = Array.from(document.querySelectorAll('button.btn.btn-secondary.d-block')).find(btn => btn.innerText.toLowerCase().includes('következő'));
     if (!nextBtn) return;
-    addCustomButton(nextBtn, 'továbblépés válasz küldése nélkül', 'következő feladatra lép, de nem menti a TeKaKu a választ (akkor használd, ha nem vagy magabiztos ebben a feladatban!)', 
+    addCustomButton(nextBtn, 'továbblépés válasz küldése nélkül', 'következő feladatra lép, de nem menti a TeKaKu a választ (akkor használd, ha nem vagy magabiztos ebben a feladatban!)', 'tekaku-next-task-no-save-btn',
         goToNextTaskWithoutSaving
     );
 }
 
+/** 
+ * creates a button theat signals that user has reviewed the auto-filled answer and believes it is correct
+ */
+let userCheckedAnswer = false;
+function createCheckedButton(){
+    if (document.querySelector('.tekaku-checked-btn')) {
+        toggleCheckedButtonAvailability(true);
+        return;
+     }
+    let nextBtn = Array.from(document.querySelectorAll('button.btn.btn-secondary.d-block')).find(btn => btn.innerText.toLowerCase().includes('következő'));
+    if (!nextBtn) return;
+    const checkedBtn = addCustomButton(nextBtn, 'ellenőrizve', 'ezt nyomd meg, ha átnézted az automatikusan kitöltött választ és helyesnek találtad', 'tekaku-checked-btn',
+        () => {
+            userCheckedAnswer = true;
+            goToNextTask();
+        }
+    );
+    if (!checkedBtn) {
+        debugLog('Failed to create checked button');
+        return;
+    }
+    checkedBtn.style.marginLeft = '10px';
+    checkedBtn.style.marginRight = '10px';
+    checkedBtn.style.backgroundColor = '#00b140';
+    checkedBtn.style.borderColor = '#00b140';
+    checkedBtn.style.color = '#ffffff';
+}
+function deleteCheckedButton() {
+    const checkedBtn = document.querySelector('.tekaku-checked-btn');
+    if (checkedBtn) {
+        checkedBtn.remove();
+    }
+
+}
+
+/**
+ * toggles the visibility of the "checked" button
+ * @param {boolean} visible - whether the button should be visible; if -1 (default), this function will toggle visibility based on current state
+ */
+function toggleCheckedButtonAvailability(canClick = -1) {
+    const checkedBtn = document.querySelector('.tekaku-checked-btn');
+    if (isUIHidden()) return; //button should not be shown if UI is hidden
+    if (!checkedBtn) {
+        return;
+    }
+    if (canClick === -1) {
+        checkedBtn.style.pointerEvents = checkedBtn.style.opacity < 1 ? 'auto' : 'none';
+        checkedBtn.style.opacity = checkedBtn.style.opacity < 1 ? 1 : '0.5';
+    } else {
+        checkedBtn.style.opacity = canClick ? '1' : '0.5';
+        checkedBtn.style.pointerEvents = canClick ? 'auto' : 'none';
+    }
+}
+
+function areAnswersSame(answerFields1, answerFields2) {
+    return answerFields1.toString() === answerFields2.map(input => input.value).toString();
+}
+
 async function main_loop() {
-    
     await initialize();
     
     let last_url = '';
@@ -536,10 +602,34 @@ async function main_loop() {
      */
     let taskFilledAnswers = [];
 
-    document.addEventListener('click', async function(event) {
-        if (document.getElementById('__input-blocker') || currentTask === null) return;
+    const events = [
+        'change',
+        'click',
+        'drop',
+        'cdkDropListDropped',
+        'dragend',
+        'pointerup',
+        'mouseup',
+        'paste',
+        'cut',
+    ];
+    events.forEach(event => {document.addEventListener(event, async () => {
         try {
-            updateSelectedAnswers(currentTask, event);
+            await updateSelectedAnswers(currentTask);
+            if(areAnswersSame(taskFilledAnswers, currentTask.answerFields)) {
+                toggleCheckedButtonAvailability(true);
+            } else {
+                toggleCheckedButtonAvailability(false);
+            }
+        }
+        catch (error) {
+            console.error({'text': 'Error updating user answers:', error});
+        }
+    })});
+    document.addEventListener('click', async function(event) {
+        try {
+        if (document.getElementById('__input-blocker') || currentTask === null) return;
+        
             // a 'lezárás' gomb ilyen, ekkor elküldjük az utolsó feladatot, mivel nem lesz következő amit érzékelünk
             if (event.target.classList.contains('btn-danger')) { 
                 if (settings.isContributor && !cancelTaskSync && currentTask != null && hasAnswers(currentTask.answerFields) && taskFilledAnswers.toString() !== currentTask.answerFields.map(input => input.value).toString()) {
@@ -592,7 +682,7 @@ async function main_loop() {
         }
         else if (event.key.toLowerCase() === 's') {
             if (currentTask != null) {
-                debugLog(`prev. task sync debug: \ncancelTaskSync: ${cancelTaskSync}, \nhasAnswers: ${hasAnswers(currentTask.answerFields)}, \ntaskFilledAnswers  : ${taskFilledAnswers}, \ncurrentTask answers: ${currentTask.answerFields.map(input => input.value)}`);
+                debugLog(`prev. task sync debug: \ncancelTaskSync: ${cancelTaskSync} \nhasAnswers: ${hasAnswers(currentTask.answerFields)} \ntaskFilledAnswers  : ${taskFilledAnswers} \ncurrentTask answers: ${currentTask.answerFields.map(input => input.value)}`);
             }
         }
         else if(event.key.toLowerCase() === 'u') {
@@ -612,6 +702,13 @@ async function main_loop() {
         else if (event.key.toLowerCase() === 'h') {
             debugLog('current task ID: ', await getTaskUniqueID());
         }
+        else if (event.key.toLowerCase() === 't') {
+            toggleCheckedButtonAvailability();
+        }
+        else if (event.key.toLowerCase() === 'c') {
+            debugLog('Creating checked button...');
+            createCheckedButton();
+        }
     });
     while (true) {
         if (currentTask) await detectUrlChange(); //if no task yet, we should immediately see if there is one
@@ -622,7 +719,18 @@ async function main_loop() {
         debugLog('task seen');
         getTaskStatus.set_text("feladat észlelve");
 
-        if (settings.isContributor && !cancelTaskSync && currentTask != null && hasAnswers(currentTask.answerFields) && taskFilledAnswers.toString() !== currentTask.answerFields.map(input => input.value).toString()) {
+        if(!settings.isContributor) {
+            debugLog('Not a contributor, skipping task sync.');
+        } else if(cancelTaskSync) {
+            debugLog('Task sync cancelled, skipping task sync.');
+        } else if(currentTask == null) {
+            debugLog('No current task, skipping task sync.');
+        } else if(!hasAnswers(currentTask.answerFields)) {
+            debugLog('Current task has no answers, skipping task sync.');
+        } else if(areAnswersSame(taskFilledAnswers, currentTask.answerFields) && !userCheckedAnswer) {
+            debugLog('No changes from previous filled answers and user has not checked the answers, skipping task sync.');
+        }
+        else {
             let syncstatus = new taskStatus('előző feladat küldése...', 'processing');
             syncTaskWithDB(currentTask).then(() => {
                 syncstatus.succeed({"text": "előző feladat küldése kész"});
@@ -630,17 +738,11 @@ async function main_loop() {
                 syncstatus.error({"text": "hiba az előző feladat küldése során: " + error});
             });
         }
-        else {
-            debugLog('not syncing prev. task because: ',)
-            !settings.isContributor ? debugLog('user not a contributor') : 
-            currentTask == null ? debugLog('no current task') : 
-            !hasAnswers(currentTask ? currentTask.answerFields : []) ? debugLog('no answers') : 
-            taskFilledAnswers.toString() === currentTask.answerFields.map(input => input.value).toString() ? debugLog('no changes from prev. filled answers') : debugLog('user clicked continue w/o sending');
-
-        }
 
         currentTask = await getTask();
-        await updateSelectedAnswers(currentTask);
+        userCheckedAnswer = false;
+        deleteCheckedButton(); 
+        await updateSelectedAnswers(currentTask, true);
 
         getTaskStatus.succeed({"text": "feladat feldolgozva"});
         url = window.location.href;
@@ -656,7 +758,7 @@ async function main_loop() {
         }
 
 
-        await updateSelectedAnswers(currentTask);
+        await updateSelectedAnswers(currentTask, true);
         taskFilledAnswers = JSON.parse(JSON.stringify(currentTask.answerFields.map(input => input.value))); //the answers that were there when task loaded, or after autocomplete
     }
 }

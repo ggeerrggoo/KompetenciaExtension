@@ -47,12 +47,15 @@ export const defaultOptions = {
  * @type {number}
  */
 export const maxImageHashSize = 20;
-export const maxImageLoadWaitTime = 5000; // Max time to wait for an image to load for hashing (in ms)
+export const maxImageLoadWaitTime = 15000; // Max time to wait for an image to load for hashing (in ms)
+
+export const MinAnswerUpdateInterval = 200; // Minimum interval between answer updates (in ms)
     
 /** 
  * Whether to automatically proceed to the next task after answering.
+ * This is for testing, so it cannot be enabled in the UI.
  * @type {boolean}
  */
 export const autoNext = false;
 
-export const _DEBUG = false;
+export const _DEBUG = true;

@@ -1,5 +1,5 @@
 import { dedupeByKey, hashImageToID, hashSHA256, debugLog, getInstallationKey} from '../scripts/utils.js';
-import { taskFieldSelectors } from '../scripts/constants.js';
+import { taskFieldSelectors, MinAnswerUpdateInterval } from '../scripts/constants.js';
 
 export { answerField, task, isThereTask, getTaskUniqueID, getTaskDDfieldID,getUserID, updateSelectedAnswers, getTask, hasAnswers }
 
@@ -143,7 +143,13 @@ function CustomNumberAnswerSelected(customNumberDiv) {
     return false;
 }
 
-async function updateSelectedAnswers(task) {
+let lastUpdateTime = 0;
+async function updateSelectedAnswers(task, dontSkip = false) {
+    if (!dontSkip && new Date().getTime() - lastUpdateTime < MinAnswerUpdateInterval) {
+        return; // prevent too frequent updates
+    }
+    lastUpdateTime = new Date().getTime();
+    await new Promise(resolve => setTimeout(resolve, 25)); // slight delay to allow DOM updates after interactions
     let fields = task.answerFields;
     for (let field of fields) {
         switch (field.type) {
